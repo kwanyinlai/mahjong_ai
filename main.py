@@ -8,6 +8,8 @@ class Tiles:
     tiletype: str
     subtype: str
     numchar: Union[int,str]
+    discarded: bool = False
+    discarded_by: Optional[Player] = None
 
     def __init__(self, tiletype: str, subtype: str, numchar: Union[int, str] = -1 ):
         tiletype = tiletype.lower()
@@ -100,7 +102,7 @@ class MahjongGame:
             current_player_number += 1
             current_player %= 4
             current_player = self.players[current_player_number]
-        self.players[starting_number].hand = self.players[starting_number].hand.get(self.tiles.pop(), 0) + 1
+        self.players[starting_number].hidden_hand = self.players[starting_number].hidden_hand.get(self.tiles.pop(), 0) + 1
 
 
 
@@ -135,21 +137,32 @@ class MahjongGame:
         self.current_player = self.players[self.current_player_no]
 
 class Player:
+
+    player_id: int
+    hidden_hand: dict
+    revealed_sets: List[Tiles]
+    score: int
+
     def __init__(self, player_id):
         self.player_id = player_id
-        self.hand = {}
+        self.hidden_hand = {}
         self.score = 0
 
-    def decide_action(self, game_state):
+    def decide_action(self, game_state: MahjongGame):
         return "action"
 
-    def check_pong(self, tile: Tiles):
-        if tile in self.hand and self.hand[tile] == 2:
+    def check_pong(self, discarded_tile: Tiles) -> Optional[Tiles]:
+        if discarded_tile in self.hidden_hand and self.hidden_hand[discarded_tile] == 2:
             print("You can pong")
+        return None
+
+
+    def discard_tile(self) -> Tiles:
+        return None
 
 
 if __name__ == "__main__":
     game = MahjongGame()
     for player in game.players:
-        print(player.hand)
+        print(player.hidden_hand)
     game.play_turn()
