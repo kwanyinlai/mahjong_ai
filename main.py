@@ -203,10 +203,10 @@ class Player:
                     remaining_hand[tile] -= 3
                     potential_hand.append([tile, tile, tile])
                     return self.can_fit_into_set(remaining_hand, potential_hand)
-                elif count >= 1 and self.check_sheung(remaining_hand, tile, potential_hand):
+                if count >= 1 and self.check_sheung(remaining_hand, tile, potential_hand):
                     return self.can_fit_into_set(remaining_hand, potential_hand)
-                else:
-                    return False
+
+                return False
             raise IndexError
 
     def check_sheung(self, remaining_hand: dict[Tiles, int], selected_tile: Tiles, potential_hand: List[List[Tiles]]):
