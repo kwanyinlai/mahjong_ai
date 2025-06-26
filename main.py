@@ -188,7 +188,7 @@ class Player:
         for tile, count in self.hidden_hand.items():
             potential_hand = []
             if count >= 2:
-                remaining_hand = self.hidden_hand[:]
+                remaining_hand = self.hidden_hand.copy()
                 potential_hand.append([tile, tile])
                 remaining_hand[tile] -= 2
                 if self.can_fit_into_set(remaining_hand, potential_hand):
@@ -196,7 +196,37 @@ class Player:
 
     def can_fit_into_set(self, remaining_hand, potential_hand: List[List[Tiles]]):
         if all(tile_count == 0 for tile_count in remaining_hand.values()):
+            return True
+        else:
+            for tile, count in remaining_hand.items():
+                if count >= 3:
+                    remaining_hand[tile] -= 3
+                    potential_hand.append([tile, tile, tile])
+                    return self.can_fit_into_set(remaining_hand, potential_hand)
+                elif count >= 1 and self.check_sheung(remaining_hand, tile, potential_hand):
+                    return self.can_fit_into_set(remaining_hand, potential_hand)
+                else:
+                    return False
+            raise IndexError
 
+    def check_sheung(self, remaining_hand: dict[Tiles, int], selected_tile: Tiles, potential_hand: List[List[Tiles]]):
+        # only check ascending sheung for consistency
+        # assumes the tile exists in the remaining hand
+        # mutates if True
+        first_tile = Tiles(tiletype=selected_tile.tiletype, subtype=selected_tile.subtype, numchar=selected_tile.numchar + 1)
+        second_tile = Tiles(tiletype=selected_tile.tiletype, subtype=selected_tile.subtype, numchar=selected_tile.numchar + 2)
+        if selected_tile.tiletype == "suit" and selected_tile.numchar <= 7:
+            if any(first_tile == tile for tile, count in remaining_hand.items() if count >= 1):
+                if any(second_tile == tile
+                       for tile, count in remaining_hand.items() if count >= 1):
+                    remaining_hand[selected_tile] -= 1
+                    remaining_hand[first_tile] -= 1
+                    remaining_hand[second_tile] -= 1
+                    potential_hand.append([selected_tile, first_tile, second_tile])
+                    return True
+            return False
+        else:
+            return False
 
 if __name__ == "__main__":
     game = MahjongGame()
