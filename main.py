@@ -95,15 +95,15 @@ class MahjongGame:
         self.players = [player1, player2, player3, player4]
 
     def initialise_player_hands(self, starting_number: int):
+        # clear player hands
         current_player_number = starting_number
         current_player = self.players[current_player_number]
-        while len(self.players[starting_number].hand) < 14:
-            self.players[starting_number].hand = self.players[starting_number].hand.get(self.tiles.pop(), 0) + 1
+        while len(self.players[starting_number].hidden_hand) < 14:
+            self.players[starting_number].draw_tile(self)
             current_player_number += 1
             current_player %= 4
             current_player = self.players[current_player_number]
-        self.players[starting_number].hidden_hand = self.players[starting_number].hidden_hand.get(self.tiles.pop(), 0) + 1
-
+        self.players[starting_number].draw_tile(self)
 
 
     def setup_game(self):
@@ -125,10 +125,7 @@ class MahjongGame:
                     # temp_player.check_sheung(self.latest_tile)
                     # temp_player.check_discard_kong(self.latest_tile)
 
-            # action = current_player.decide_action(self)
-            # self.process_action(action)
-            # if self.check_game_over():
-            #     break
+            # action = current_player.make_action(self)
             self.next_turn()
 
     def draw_tile(self) -> Tiles:
@@ -148,17 +145,29 @@ class MahjongGame:
 class Player:
 
     player_id: int
-    hidden_hand: dict
+    _hidden_hand: dict
     revealed_sets: List[List[Tiles]]
-    score: int
+    total_score: int
+    fan: int
 
     def __init__(self, player_id):
         self.player_id = player_id
         self.hidden_hand = {}
-        self.score = 0
+        self.total_score = 0
 
-    def decide_action(self, game_state: MahjongGame):
-        return "action"
+    def make_action(self, game_state: MahjongGame):
+
+        self.draw_tile(game_state)
+        # calculate fan
+        # check game over
+        # check draw kong
+        # check flower
+
+
+        self.discard_tile()
+
+        # calculate current hand fan
+
 
     def check_pong(self, discarded_tile: Tiles) -> Optional[Tiles]:
         if discarded_tile in self.hidden_hand and self.hidden_hand[discarded_tile] == 2:
@@ -167,7 +176,11 @@ class Player:
 
 
     def discard_tile(self) -> Tiles:
-        return None
+        raise NotImplementedError()
+
+    def draw_tile(self, game_state: MahjongGame):
+        drawn_tile = game_state.draw_tile()
+        self.hidden_hand[drawn_tile] = self.hidden_hand.get(drawn_tile, 0) + 1
 
 
 if __name__ == "__main__":
