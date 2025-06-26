@@ -11,6 +11,9 @@ class Tiles:
     discarded: bool = False
     discarded_by: Optional[Player] = None
 
+    def __hash__(self):
+        return hash((self.tiletype, self.subtype, self.numchar))
+
     def __init__(self, tiletype: str, subtype: str, numchar: Union[int, str] = -1 ):
         tiletype = tiletype.lower()
         if tiletype not in ('suit', 'honour', 'flower'):
@@ -98,10 +101,10 @@ class MahjongGame:
         # clear player hands
         current_player_number = starting_number
         current_player = self.players[current_player_number]
-        while len(self.players[starting_number].hidden_hand) < 14:
+        while len(self.players[starting_number]._hidden_hand) < 14:
             self.players[starting_number].draw_tile(self)
             current_player_number += 1
-            current_player %= 4
+            current_player_number %= 4
             current_player = self.players[current_player_number]
         self.players[starting_number].draw_tile(self)
 
@@ -117,7 +120,7 @@ class MahjongGame:
     def play_turn(self):
         next_player = self.current_player
         while True:
-            if self.latest_tile:
+            if self.latest_tile is not None:
                 for temp_player in self.players:
                     if temp_player.check_pong(self.latest_tile): # or check_sheung what not
                         self.next_turn(temp_player)
@@ -152,8 +155,16 @@ class Player:
 
     def __init__(self, player_id):
         self.player_id = player_id
-        self.hidden_hand = {}
+        self._hidden_hand = {}
         self.total_score = 0
+
+    def set_hand(self):
+        # for testing
+        tile1 = Tiles(tiletype="suit", subtype="circle", numchar=1)
+        tile2 = Tiles(tiletype="suit", subtype="circle", numchar=2)
+        tile3 = Tiles(tiletype="suit", subtype="circle", numchar=3)
+        tile4 = Tiles(tiletype="suit", subtype="circle", numchar=4)
+        self._hidden_hand = {tile4: 2}
 
     def make_action(self, game_state: MahjongGame):
 
@@ -170,7 +181,7 @@ class Player:
 
 
     def check_pong(self, discarded_tile: Tiles) -> Optional[Tiles]:
-        if discarded_tile in self.hidden_hand and self.hidden_hand[discarded_tile] == 2:
+        if discarded_tile in self._hidden_hand and self._hidden_hand[discarded_tile] == 2:
             print("You can pong")
         return None
 
@@ -180,19 +191,23 @@ class Player:
 
     def draw_tile(self, game_state: MahjongGame):
         drawn_tile = game_state.draw_tile()
-        self.hidden_hand[drawn_tile] = self.hidden_hand.get(drawn_tile, 0) + 1
+        self._hidden_hand[drawn_tile] = self._hidden_hand.get(drawn_tile, 0) + 1
 
 
     def check_winning_hand(self) -> bool:
         possible_hands = []
-        for tile, count in self.hidden_hand.items():
+
+        for tile, count in self._hidden_hand.items():
             potential_hand = []
             if count >= 2:
-                remaining_hand = self.hidden_hand.copy()
+                remaining_hand = self._hidden_hand.copy()
                 potential_hand.append([tile, tile])
                 remaining_hand[tile] -= 2
+                print("hi")
                 if self.can_fit_into_set(remaining_hand, potential_hand):
                     possible_hands.append(potential_hand)
+        print(possible_hands)
+        return possible_hands is not None
 
     def can_fit_into_set(self, remaining_hand, potential_hand: List[List[Tiles]]):
         if all(tile_count == 0 for tile_count in remaining_hand.values()):
@@ -229,7 +244,11 @@ class Player:
             return False
 
 if __name__ == "__main__":
-    game = MahjongGame()
-    for player in game.players:
-        print(player.hidden_hand)
-    game.play_turn()
+    # game = MahjongGame()
+    # for player in game.players:
+    #     print(player.hidden_hand)
+    # game.play_turn()
+    player1 = Player(1)
+    player1.set_hand()
+    print(player1._hidden_hand)
+    player1.check_winning_hand()
