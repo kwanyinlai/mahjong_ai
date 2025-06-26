@@ -164,7 +164,12 @@ class Player:
         tile2 = Tiles(tiletype="suit", subtype="circle", numchar=2)
         tile3 = Tiles(tiletype="suit", subtype="circle", numchar=3)
         tile4 = Tiles(tiletype="suit", subtype="circle", numchar=4)
-        self._hidden_hand = {tile4: 2}
+        tile5 = Tiles(tiletype="suit", subtype="circle", numchar=5)
+        tile6 = Tiles(tiletype="suit", subtype="circle", numchar=6)
+        tile7 = Tiles(tiletype="suit", subtype="circle", numchar=7)
+        tile8 = Tiles(tiletype="suit", subtype="circle", numchar=8)
+        tile9 = Tiles(tiletype="suit", subtype="circle", numchar=9)
+        self._hidden_hand = {tile1: 2, tile2:3, tile3:1, tile4: 2, tile5:5, tile6:1, tile9: 3}
 
     def make_action(self, game_state: MahjongGame):
 
