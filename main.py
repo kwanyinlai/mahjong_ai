@@ -115,10 +115,13 @@ class MahjongGame:
 
 
     def play_turn(self):
+        next_player = self.current_player
         while True:
             if self.latest_tile:
                 for temp_player in self.players:
-                    temp_player.check_pong(self.latest_tile)
+                    if temp_player.check_pong(self.latest_tile): # or check_sheung what not
+                        self.next_turn(temp_player)
+                        break
                     # temp_player.check_sheung(self.latest_tile)
                     # temp_player.check_discard_kong(self.latest_tile)
 
@@ -128,11 +131,17 @@ class MahjongGame:
             #     break
             self.next_turn()
 
-    def process_action(self, action):
-        # Process the action taken by the current player
-        pass
+    def draw_tile(self) -> Tiles:
+        return self.tiles.pop()
 
-    def next_turn(self):
+    def discard_tile(self, discarded_tile: Tiles):
+        self.latest_tile = discarded_tile
+        self.discarded_tiles.append(discarded_tile)
+
+    def next_turn(self, player_skip: Optional[Player] = None):
+        if player_skip:
+            self.current_player_no = player_skip.player_id
+            self.current_player = self.players[self.current_player_no]
         self.current_player_no = (self.current_player_no + 1) % 4
         self.current_player = self.players[self.current_player_no]
 
@@ -140,7 +149,7 @@ class Player:
 
     player_id: int
     hidden_hand: dict
-    revealed_sets: List[Tiles]
+    revealed_sets: List[List[Tiles]]
     score: int
 
     def __init__(self, player_id):
