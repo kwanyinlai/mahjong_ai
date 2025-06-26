@@ -52,6 +52,8 @@ class Tiles:
     def __eq__(self, other: Tiles):
         return self.tiletype == other.tiletype and self.subtype == other.subtype and self.numchar == other.numchar
 
+    def __str__(self):
+        return self.tiletype + self.subtype + str(self.numchar)
 
 class MahjongGame:
 
@@ -208,7 +210,6 @@ class Player:
                 remaining_hand = self._hidden_hand.copy()
                 potential_hand.append([tile, tile])
                 remaining_hand[tile] -= 2
-                print("hi")
                 if self.can_fit_into_set(remaining_hand, potential_hand):
                     possible_hands.append(potential_hand)
         print(possible_hands)
@@ -217,11 +218,16 @@ class Player:
     def can_fit_into_set(self, remaining_hand, potential_hand: List[List[Tiles]]):
         if all(tile_count == 0 for tile_count in remaining_hand.values()):
             return True
+
         else:
             for tile, count in remaining_hand.items():
+                print(tile)
+                print(count)
+                # issue with mutating and for loop
                 if count >= 3:
                     remaining_hand[tile] -= 3
                     potential_hand.append([tile, tile, tile])
+                    print(potential_hand)
                     return self.can_fit_into_set(remaining_hand, potential_hand)
                 if count >= 1 and self.check_sheung(remaining_hand, tile, potential_hand):
                     return self.can_fit_into_set(remaining_hand, potential_hand)
