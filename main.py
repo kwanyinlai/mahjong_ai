@@ -176,11 +176,26 @@ class Player:
 
 
     def discard_tile(self) -> Tiles:
-        raise NotImplementedError()
+        raise NotImplementedError() # implement decision making logic or player input
 
     def draw_tile(self, game_state: MahjongGame):
         drawn_tile = game_state.draw_tile()
         self.hidden_hand[drawn_tile] = self.hidden_hand.get(drawn_tile, 0) + 1
+
+
+    def check_winning_hand(self) -> bool:
+        possible_hands = []
+        for tile, count in self.hidden_hand.items():
+            potential_hand = []
+            if count >= 2:
+                remaining_hand = self.hidden_hand[:]
+                potential_hand.append([tile, tile])
+                remaining_hand[tile] -= 2
+                if self.can_fit_into_set(remaining_hand, potential_hand):
+                    possible_hands.append(potential_hand)
+
+    def can_fit_into_set(self, remaining_hand, potential_hand: List[List[Tiles]]):
+        if all(tile_count == 0 for tile_count in remaining_hand.values()):
 
 
 if __name__ == "__main__":
