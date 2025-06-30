@@ -186,7 +186,6 @@ class Player:
 
         # calculate current hand fan
 
-
     def check_pong(self, discarded_tile: Tiles) -> Optional[Tiles]:
         if discarded_tile in self._hidden_hand and self._hidden_hand[discarded_tile] == 2:
             print("You can pong")
@@ -198,39 +197,53 @@ class Player:
 
     def draw_tile(self, game_state: MahjongGame):
         drawn_tile = game_state.draw_tile()
+        while drawn_tile.subtype == 'flower':
+            self.revealed_sets.append([drawn_tile])
+            drawn_tile = game_state.draw_tile()
         self._hidden_hand[drawn_tile] = self._hidden_hand.get(drawn_tile, 0) + 1
 
 
     def check_winning_hand(self) -> bool:
         possible_hands = []
-        loop = self._hidden_hand.copy()
-        for tile, count in loop.items():
-            print("check")
-            print(tile, count)
+        for tile, count in self._hidden_hand.items():
             potential_hand = []
-            if count >= 2:
+            if count >= 2: # check all possible combinations of 'eyes' first for efficiency
                 remaining_hand = self._hidden_hand.copy()
                 potential_hand.append([tile, tile])
                 remaining_hand[tile] -= 2
                 if self.can_fit_into_set(remaining_hand, potential_hand):
+                    potential_hand += self.revealed_sets
                     possible_hands.append(potential_hand)
-        print(possible_hands)
+
+
+        # printing for debugging
+        for hand in possible_hands:
+            print("====================")
+            for i in hand:
+                print("[")
+                for j in i:
+                    print(j)
+                print("]")
+            print("====================")
+
+
         return possible_hands is not None
+
+
+    def check_thirteen_orphans(self, remaining_hand, potential_hand):
+        # checking edge case
+        pass
 
     def can_fit_into_set(self, remaining_hand, potential_hand: List[List[Tiles]]):
         if all(tile_count == 0 for tile_count in remaining_hand.values()):
             return True
-
         else:
             for tile, count in remaining_hand.items():
-                print(tile)
-                print(count)
 
                 # issue with mutating and for loop
                 if count >= 3:
                     remaining_hand[tile] -= 3
                     potential_hand.append([tile, tile, tile])
-                    print(potential_hand)
                     return self.can_fit_into_set(remaining_hand, potential_hand)
                 if count >= 1 and self.check_sheung(remaining_hand, tile, potential_hand):
                     return self.can_fit_into_set(remaining_hand, potential_hand)
@@ -259,6 +272,42 @@ class Player:
         else:
             return False
 
+    def filter_by_fan(self, potential_hand: List[List[Tiles]]) -> int:
+
+        fan = 0
+        # check flowers
+
+
+        # count honours
+        # great dragon
+
+
+        # small dragon
+
+        # count honour by fan
+
+
+
+        # check wind (current wind)
+        # great winds
+        # small winds
+        # count by winds and circle
+        # dui dui wu
+        if all(first_tile == second_tile  for first_tile, second_tile in potential_hand):
+            fan += 3
+            # assuming possible hands is structured correctly and can only contain a straight or a triplet
+        elif all(first_tile.numchar == second_tile.numchar + 1 for first_tile, second_tile in potential_hand ): #ping wu
+            fan += 1 # need to isolate the eye somehow
+       
+u
+
+        # qing yat sik
+
+        # wun yat sik
+        return fan
+
+
+
 if __name__ == "__main__":
     # game = MahjongGame()
     # for player in game.players:
@@ -266,5 +315,4 @@ if __name__ == "__main__":
     # game.play_turn()
     player1 = Player(1)
     player1.set_hand()
-    print(player1._hidden_hand)
     player1.check_winning_hand()
