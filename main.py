@@ -203,8 +203,10 @@ class Player:
 
     def check_winning_hand(self) -> bool:
         possible_hands = []
-
-        for tile, count in self._hidden_hand.items():
+        loop = self._hidden_hand.copy()
+        for tile, count in loop.items():
+            print("check")
+            print(tile, count)
             potential_hand = []
             if count >= 2:
                 remaining_hand = self._hidden_hand.copy()
@@ -223,6 +225,7 @@ class Player:
             for tile, count in remaining_hand.items():
                 print(tile)
                 print(count)
+
                 # issue with mutating and for loop
                 if count >= 3:
                     remaining_hand[tile] -= 3
@@ -231,8 +234,10 @@ class Player:
                     return self.can_fit_into_set(remaining_hand, potential_hand)
                 if count >= 1 and self.check_sheung(remaining_hand, tile, potential_hand):
                     return self.can_fit_into_set(remaining_hand, potential_hand)
-
-                return False
+                if count == 0:
+                    pass
+                else:
+                    return False
             raise IndexError
 
     def check_sheung(self, remaining_hand: dict[Tiles, int], selected_tile: Tiles, potential_hand: List[List[Tiles]]):
