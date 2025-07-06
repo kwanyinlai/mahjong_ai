@@ -196,11 +196,11 @@ class Player:
         while drawn_tile.subtype == 'flower':
             self.revealed_sets.append([drawn_tile])
             drawn_tile = game_state.draw_tile()
-        if self._hidden_hand[drawn_tile] == 3:
-            self.decide_add_kong(drawn_tile)
-        elif self.check_winning_hand():
-            self.decide_win(drawn_tile, game_state)
-        if not game_state.game_over:
+        if self.decide_add_kong(drawn_tile):
+            pass
+        elif self.decide_win(drawn_tile, game_state):
+            pass
+        else:
             self._hidden_hand[drawn_tile] = self._hidden_hand.get(drawn_tile, 0) + 1
 
 
@@ -254,7 +254,7 @@ class Player:
             raise IndexError
 
     @staticmethod
-    def check_sheung(self, remaining_hand: dict[Tiles, int], selected_tile: Tiles, potential_hand: List[List[Tiles]]):
+    def check_sheung(remaining_hand: dict[Tiles, int], selected_tile: Tiles, potential_hand: List[List[Tiles]]):
         # only check ascending sheung for consistency
         # assumes the tile exists in the remaining hand
         # mutates if True
@@ -298,16 +298,52 @@ class Player:
         # wun yat sik
         return fan
 
-    def decide_add_kong(self, latest_tile):
+    def show_all_possible_sheungs(self, latest_tile: Tiles) -> List[Tiles]:
+        possible_sheungs = []
+        lowest_tile, second_lowest_tile, highest_tile, second_highest_tile = None, None, None, None
+        if latest_tile.numchar >= 3:
+            lowest_tile = Tiles(tiletype=latest_tile.tiletype, subtype=latest_tile.subtype,
+                                numchar=latest_tile.numchar - 2)
+        if latest_tile.numchar >= 2:
+            second_lowest_tile = Tiles(tiletype=latest_tile.tiletype, subtype=latest_tile.subtype,
+                                       numchar=latest_tile.numchar - 1)
+        if latest_tile.numchar <= 7:
+            highest_tile = Tiles(tiletype=latest_tile.tiletype, subtype=latest_tile.subtype,
+                                 numchar=latest_tile.numchar + 2)
+        if latest_tile.numchar <= 8:
+            second_highest_tile = Tiles(tiletype=latest_tile.tiletype, subtype=latest_tile.subtype,
+                                        numchar=latest_tile.numchar + 1)
+        if (lowest_tile is not None and self._hidden_hand[lowest_tile] >= 1 and self._hidden_hand[second_lowest_tile]
+                >= 1):
+            possible_sheungs.append([lowest_tile, second_lowest_tile, latest_tile])
+        if (second_lowest_tile is not None and second_highest_tile is not None and self._hidden_hand[second_lowest_tile]
+                >= 1 and self._hidden_hand[second_highest_tile] >= 1):
+            possible_sheungs.append([second_lowest_tile, latest_tile, second_highest_tile])
+        if (highest_tile is not None and self._hidden_hand[highest_tile] >= 1 and self._hidden_hand[second_highest_tile]
+                >= 1):
+            possible_sheungs.append([latest_tile, second_highest_tile, highest_tile])
+        return possible_sheungs
+
+    def decide_add_kong(self, latest_tile) -> bool:
+        if self._hidden_hand[latest_tile] != 3:
+            return False
         raise NotImplementedError
 
-    def decide_win(self, latest_tile, game_state):
+    def decide_win(self, latest_tile, game_state) -> bool:
+        if not self.check_winning_hand():
+            return False
         raise NotImplementedError
+        # mutate game_state.game_over to determine whether the win is claimed
 
-    def decide_sheung(self, selected_tile) -> bool:
+    def decide_sheung(self, latest_tile: Tiles) -> bool:
+        possible_sheungs = self.show_all_possible_sheungs(latest_tile)
+        if not possible_sheungs:
+            return False
         raise NotImplementedError
 
     def decide_pong(self, discarded_tile: Tiles) -> bool:
+        if self._hidden_hand[discarded_tile] <= 2:
+            return False
         raise NotImplementedError
 
     def discard_tile(self, game_state: MahjongGame) -> Tiles:
