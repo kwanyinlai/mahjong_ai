@@ -120,18 +120,35 @@ class MahjongGame:
 
 
     def play_turn(self):
-        next_player = self.current_player
-        while True:
+        game_over = False
+        while not game_over:
+            action_taken = True
+            temp_player = self.current_player
             if self.latest_tile is not None:
-                for temp_player in self.players:
-                    if temp_player.check_pong(self.latest_tile): # or check_sheung what not
-                        self.next_turn(temp_player)
-                        break
-                    # temp_player.check_sheung(self.latest_tile)
-                    # temp_player.check_discard_kong(self.latest_tile)
+                temp_player_number = (self.current_player_no + 1) % 4
+                temp_player = self.players[temp_player_number]
 
-            # action = current_player.make_action(self)
-            self.next_turn()
+
+                for i in range(0,3):
+                    temp_player = self.players[temp_player_number]
+
+                    if temp_player.decide_pong(self.latest_tile) or temp_player.decide_add_kong(self.latest_tile):
+                        break
+                    if temp_player.decide_win(self.latest_tile):
+                       game_over = True
+                       break
+
+                    temp_player_number += 1
+                    temp_player_number %= 4
+                if not action_taken and self.players[temp_player_number].decide_sheung(self.latest_tile):
+                    action_taken = True
+            if action_taken:
+                temp_player.discard_tile(self)
+                self.next_turn(temp_player)
+            else:
+                self.current_player.draw_tile(self)
+                self.current_player.discard_tile(self)
+                self.next_turn()
 
     def draw_tile(self) -> Tiles:
         return self.tiles.pop()
@@ -173,29 +190,17 @@ class Player:
         tile9 = Tiles(tiletype="suit", subtype="circle", numchar=9)
         self._hidden_hand = {tile1: 2, tile2:3, tile3:1, tile4: 2, tile5:5, tile6:1, tile9: 3}
 
-    def make_action(self, game_state: MahjongGame):
-
-        self.draw_tile(game_state)
-        # calculate fan
-        # check game over
-        # check draw kong
-        # check flower
+    def decide_pong(self, discarded_tile: Tiles) -> bool:
+        raise NotImplementedError
 
 
-        self.discard_tile()
-
-        # calculate current hand fan
-
-    def check_pong(self, discarded_tile: Tiles) -> Optional[Tiles]:
-        if discarded_tile in self._hidden_hand and self._hidden_hand[discarded_tile] == 2:
-            print("You can pong")
-        return None
-
-
-    def discard_tile(self) -> Tiles:
-        raise NotImplementedError() # implement decision making logic or player input
+    def discard_tile(self, game_state: MahjongGame) -> Tiles:
+        raise NotImplementedError # implement decision making logic or player input
 
     def draw_tile(self, game_state: MahjongGame):
+
+        # flower check, add kong and decide win need to be considered here
+
         drawn_tile = game_state.draw_tile()
         while drawn_tile.subtype == 'flower':
             self.revealed_sets.append([drawn_tile])
@@ -253,6 +258,7 @@ class Player:
                     return False
             raise IndexError
 
+    @staticmethod
     def check_sheung(self, remaining_hand: dict[Tiles, int], selected_tile: Tiles, potential_hand: List[List[Tiles]]):
         # only check ascending sheung for consistency
         # assumes the tile exists in the remaining hand
@@ -271,6 +277,11 @@ class Player:
             return False
         else:
             return False
+
+
+    def decide_sheung(self, selected_tile) -> bool:
+        raise NotImplementedError
+
 
     def filter_by_fan(self, potential_hand: List[List[Tiles]]) -> int:
 
@@ -299,13 +310,18 @@ class Player:
         elif all(first_tile.numchar == second_tile.numchar + 1 for first_tile, second_tile in potential_hand ): #ping wu
             fan += 1 # need to isolate the eye somehow
        
-u
+
 
         # qing yat sik
 
         # wun yat sik
         return fan
 
+    def decide_add_kong(self, latest_tile):
+        raise NotImplementedError
+
+    def decide_win(self, latest_tile):
+        raise NotImplementedError
 
 
 if __name__ == "__main__":
