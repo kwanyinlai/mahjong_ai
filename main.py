@@ -5,6 +5,7 @@ import bisect
 from typing import Union, List, Optional, Tuple
 
 
+
 class Tiles:
     tiletype: str
     subtype: str
@@ -57,7 +58,7 @@ class Tiles:
         return self.tiletype + self.subtype + str(self.numchar)
 
     def __lt__(self, other: Tiles):
-        suit_order = {'circle': 0, 'bamboo': 1, 'number': 2, 'wind': 3, 'dragon': 4}
+        suit_order = {'circle': 0, 'bamboo': 1, 'number': 2, 'wind': 3, 'dragon': 4, 'flower': 5}
         if self.subtype != other.subtype:
             return suit_order[self.subtype] < suit_order[other.subtype]
         return self.numchar < other.numchar
@@ -77,7 +78,6 @@ class MahjongGame:
         self.players = [Player(i) for i in range(4)]
         self.tiles = MahjongGame.initialize_tiles()
         self.setup_game()
-        print(len(self.tiles))
 
     @staticmethod
     def initialize_tiles() -> List[Tiles]:
@@ -103,10 +103,10 @@ class MahjongGame:
         return tiles
 
     def initialise_players(self):
-        player1 = Player(1)
-        player2 = Player(2)
-        player3 = Player(3)
-        player4 = Player(4)
+        player1 = RandomBot(1)
+        player2 = RandomBot(2)
+        player3 = RandomBot(3)
+        player4 = RandomBot(4)
         self.players = [player1, player2, player3, player4]
 
     def initialise_player_hands(self, starting_number: int):
@@ -114,11 +114,14 @@ class MahjongGame:
         current_player_number = starting_number
         current_player = self.players[current_player_number]
         while len(self.players[starting_number]._hidden_hand) < 14:
-            self.players[starting_number].draw_tile(self)
+            self.players[starting_number].add_tile(self.draw_tile())
+            print(len(self.players[starting_number]._hidden_hand))
             current_player_number += 1
             current_player_number %= 4
             current_player = self.players[current_player_number]
+        print("sup")
         self.players[starting_number].draw_tile(self)
+        print("sup")
 
 
     def setup_game(self):
@@ -174,6 +177,7 @@ class MahjongGame:
         self.current_player_no = (self.current_player_no + 1) % 4
         self.current_player = self.players[self.current_player_no]
 
+
 class Player:
 
     player_id: int
@@ -202,22 +206,30 @@ class Player:
 
 
     def draw_tile(self, game_state: MahjongGame):
+        print("nope")
         drawn_tile = game_state.draw_tile()
+        print("why")
         while drawn_tile.subtype == 'flower':
+            print("kon")
             self.revealed_sets.append([drawn_tile])
             drawn_tile = game_state.draw_tile()
         if self.decide_add_kong(drawn_tile):
+            print("kong")
             pass
         elif self.decide_win(drawn_tile, game_state):
+            print("win")
             pass
         else:
+            print("here")
             self.add_tile(drawn_tile)
+        print("Here")
 
 
     def check_winning_hand(self) -> bool:
         possible_hands = []
         i = 0
-        while i < len(self._hidden_hand):
+        while i < len(self._hidden_hand): # TODO: stuck in a loop here
+            print("k")
             tile = self._hidden_hand[i]
             potential_hand = []
             if self._hidden_hand[i+1] == tile: # check all possible combinations of 'eyes' first for efficiency
@@ -230,61 +242,56 @@ class Player:
                     possible_hands.append(potential_hand)
 
             i+=1
-
-
-        # printing for debugging
-        for hand in possible_hands:
-            print("====================")
-            for i in hand:
-                print("[")
-                for j in i:
-                    print(j)
-                print("]")
-            print("====================")
-
-
+        print("o")
         return possible_hands is not []
 
     def check_thirteen_orphans(self, remaining_hand, potential_hand):
         # checking edge case
         pass
 
-    def can_fit_into_set(self, remaining_hand, potential_hand: List[List[Tiles]]):
-        if all(tile_count == 0 for tile_count in remaining_hand.values()):
+    def can_fit_into_set(self, remaining_hand: List[Tiles], potential_hand: List[List[Tiles]]):
+        if len(remaining_hand)==0:
             return True
         else:
-            for tile, count in remaining_hand.items():
+            print(len(remaining_hand))
+            tile = remaining_hand[0] # always checks pong first. this approach does appear to work logically speaking
+                                        # because of the sorted hand clears edge cases but
+                                        #  not rigorously proven so possibly bugs CAUTION
+            if len(remaining_hand) >= 3 and remaining_hand[1] == tile and remaining_hand[2] == tile:
+                for j in range(0,3):
+                     remaining_hand.pop(0)
+                potential_hand.append([tile, tile, tile])
+                return self.can_fit_into_set(remaining_hand, potential_hand)
+            if self.check_sheung(remaining_hand, tile, potential_hand):
+                return self.can_fit_into_set(remaining_hand, potential_hand)
 
-                # issue with mutating and for loop
-                if count >= 3:
-                    remaining_hand[tile] -= 3
-                    potential_hand.append([tile, tile, tile])
-                    return self.can_fit_into_set(remaining_hand, potential_hand)
-                if count >= 1 and self.check_sheung(remaining_hand, tile, potential_hand):
-                    return self.can_fit_into_set(remaining_hand, potential_hand)
-                if count == 0:
-                    pass
-                else:
-                    return False
-            raise IndexError
+            return False
 
     @staticmethod
     def check_sheung(remaining_hand: List[Tiles], selected_tile: Tiles, potential_hand: List[List[Tiles]]):
         # only check ascending sheung for consistency
         # assumes the tile exists in the remaining hand
         # mutates if True
-        first_tile = Tiles(tiletype=selected_tile.tiletype, subtype=selected_tile.subtype, numchar=selected_tile.numchar + 1)
-        second_tile = Tiles(tiletype=selected_tile.tiletype, subtype=selected_tile.subtype, numchar=selected_tile.numchar + 2)
-        if selected_tile.tiletype == "suit" and selected_tile.numchar <= 7:
-            if any(first_tile == tile for tile, count in remaining_hand.items() if count >= 1):
-                if any(second_tile == tile for tile in remaining_hand):
-                    remaining_hand[selected_tile] -= 1
-                    remaining_hand[first_tile] -= 1
-                    remaining_hand[second_tile] -= 1
-                    potential_hand.append([selected_tile, first_tile, second_tile])
-                    return True
+        if not (selected_tile.tiletype == "suit" and selected_tile.numchar <= 7):
+            return False
+        index = bisect.bisect_left(remaining_hand, selected_tile)
+        indices = [index, -1, -1]
+        target_tile = Tiles(tiletype = selected_tile.tiletype,
+                            subtype = selected_tile.subtype,
+                            numchar = selected_tile.numchar+2)
+        while index < len(remaining_hand) and remaining_hand[index] < target_tile:
+            if remaining_hand[index].numchar == target_tile.numchar + 1:
+                indices = index
+            elif remaining_hand[index].numchar == target_tile.numchar + 2:
+                indices = index
+            index += 1
+
+        if indices[1] == -1 or indices[2] == -1:
             return False
         else:
+            potential_hand.append([remaining_hand.pop(indices[0]),
+                                  remaining_hand.pop(indices[0]-1),
+                                  remaining_hand.pop(indices[1]-2)])
             return False
 
     @staticmethod
@@ -357,12 +364,19 @@ class Player:
 
 
 
-    def decide_add_kong(self, latest_tile) -> bool:
-        if self._hidden_hand[latest_tile] != 3:
+    def decide_add_kong(self, latest_tile: Tiles) -> bool:
+        index = bisect.bisect_left(self._hidden_hand, latest_tile)
+        print("???")
+        if (self._hidden_hand[index] != latest_tile or
+            (self._hidden_hand[index + 1] != latest_tile and self._hidden_hand[index+2] != latest_tile) or
+            (self._hidden_hand[index+1] != latest_tile and self._hidden_hand[index-1] != latest_tile) or
+            (self._hidden_hand[index-1] != latest_tile and self._hidden_hand[index-2] != latest_tile)
+           ):
             return False
         raise NotImplementedError
 
     def decide_win(self, latest_tile, game_state) -> bool:
+        print("!!!")
         if not self.check_winning_hand():
             return False
         raise NotImplementedError
@@ -370,15 +384,16 @@ class Player:
 
     def decide_sheung(self, latest_tile: Tiles) -> bool:
         possible_sheungs = self.show_all_possible_sheungs(latest_tile)
-        if not possible_sheungs:
+        if all(sheung is None for sheung in possible_sheungs):
             return False
+
         raise NotImplementedError
 
     def decide_pong(self, discarded_tile: Tiles) -> bool:
 
         index = bisect.bisect_left(self._hidden_hand, discarded_tile)
         if self._hidden_hand[index] != discarded_tile or (self._hidden_hand[index + 1] != discarded_tile and
-                                                          self._hidden_hand[index -1] == discarded_tile):
+                                                          self._hidden_hand[index -1] != discarded_tile):
             return False
 
         raise NotImplementedError
@@ -386,15 +401,59 @@ class Player:
     def discard_tile(self, game_state: MahjongGame) -> Tiles:
         raise NotImplementedError # implement decision making logic or player input
 
-    def add_tile(self, drawn_tile):
+    def add_tile(self, drawn_tile: Tiles):
         bisect.insort(self._hidden_hand, drawn_tile)
+
+class RandomBot(Player):
+    def decide_pong(self, tile: Tiles):
+        super().decide_pong(tile)
+        is_pong = random.choice([True, False])
+        if is_pong:
+            self._hidden_hand.remove(tile)
+            self._hidden_hand.remove(tile) # TODO: im lazy to implement efficient removal right now using sorted
+            self.revealed_sets.append([tile, tile, tile])
+
+        return is_pong
+
+    def decide_add_kong(self, latest_tile) -> bool:
+        super().decide_add_kong(latest_tile)
+        is_kong = random.choice([True, False])
+        if is_kong:
+            self._hidden_hand.remove(latest_tile)
+            self._hidden_hand.remove(latest_tile)
+            self._hidden_hand.remove(latest_tile)  # TODO: im lazy to implement efficient removal right now using sorted
+            self.revealed_sets.append([latest_tile, latest_tile, latest_tile])
+        return is_kong
+
+
+    def decide_win(self, latest_tile, game_state):
+        super().decide_win(latest_tile, game_state)
+        return random.choice([True, False])
+
+    def decide_sheung(self, latest_tile) -> bool:
+        possible_sheungs = self.show_all_possible_sheungs(latest_tile)
+        if all(sheung is None for sheung in possible_sheungs):
+            return False
+        is_sheung = random.choice([True, False])
+        if is_sheung:
+            decided_sheung = random.choice([indices for indices in possible_sheungs if indices is not None])
+            for i in range (0, len(decided_sheung)):
+                self._hidden_hand.pop(decided_sheung[i] - i)
+
+        return is_sheung
+
+
+    def discard_tile(self, game_state: MahjongGame) -> Tiles:
+        removed_tile = random.choice(self._hidden_hand)
+        self._hidden_hand.remove(removed_tile)
+        return removed_tile
+
 
 
 if __name__ == "__main__":
-    # game = MahjongGame()
-    # for player in game.players:
-    #     print(player.hidden_hand)
-    # game.play_turn()
-    player1 = Player(1)
-    player1.set_hand()
-    player1.check_winning_hand()
+    game = MahjongGame()
+    print("hi")
+    for player in game.players:
+        print(player._hidden_hand)
+    game.play_turn()
+
