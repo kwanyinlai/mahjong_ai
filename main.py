@@ -71,7 +71,7 @@ class MahjongGame:
     current_player_no: int
     current_player: Player
     discarded_tiles: List[Tiles]
-    latest_tile: Tiles
+    latest_tile: Tiles = None
     game_over: bool
 
     def __init__(self):
@@ -114,14 +114,11 @@ class MahjongGame:
         current_player_number = starting_number
         current_player = self.players[current_player_number]
         while len(self.players[starting_number]._hidden_hand) < 14:
-            self.players[starting_number].add_tile(self.draw_tile())
-            print(len(self.players[starting_number]._hidden_hand))
+            self.players[current_player_number].add_tile(self.draw_tile())
             current_player_number += 1
             current_player_number %= 4
             current_player = self.players[current_player_number]
-        print("sup")
         self.players[starting_number].draw_tile(self)
-        print("sup")
 
 
     def setup_game(self):
@@ -206,43 +203,33 @@ class Player:
 
 
     def draw_tile(self, game_state: MahjongGame):
-        print("nope")
         drawn_tile = game_state.draw_tile()
-        print("why")
         while drawn_tile.subtype == 'flower':
-            print("kon")
             self.revealed_sets.append([drawn_tile])
             drawn_tile = game_state.draw_tile()
         if self.decide_add_kong(drawn_tile):
-            print("kong")
             pass
         elif self.decide_win(drawn_tile, game_state):
-            print("win")
             pass
         else:
-            print("here")
             self.add_tile(drawn_tile)
-        print("Here")
 
 
     def check_winning_hand(self) -> bool:
         possible_hands = []
         i = 0
-        while i < len(self._hidden_hand): # TODO: stuck in a loop here
-            print("k")
+        while i < len(self._hidden_hand) - 1: # TODO: stuck in a loop here
             tile = self._hidden_hand[i]
             potential_hand = []
             if self._hidden_hand[i+1] == tile: # check all possible combinations of 'eyes' first for efficiency
                 remaining_hand = self._hidden_hand.copy()
                 potential_hand.append([remaining_hand.pop(i), remaining_hand.pop(i)])
-                i-=1
 
                 if self.can_fit_into_set(remaining_hand, potential_hand):
                     potential_hand += self.revealed_sets
                     possible_hands.append(potential_hand)
 
             i+=1
-        print("o")
         return possible_hands is not []
 
     def check_thirteen_orphans(self, remaining_hand, potential_hand):
@@ -373,13 +360,13 @@ class Player:
             (self._hidden_hand[index-1] != latest_tile and self._hidden_hand[index-2] != latest_tile)
            ):
             return False
-        raise NotImplementedError
+        return True
 
     def decide_win(self, latest_tile, game_state) -> bool:
         print("!!!")
         if not self.check_winning_hand():
             return False
-        raise NotImplementedError
+        return True
         # mutate game_state.game_over to determine whether the win is claimed
 
     def decide_sheung(self, latest_tile: Tiles) -> bool:
@@ -387,7 +374,7 @@ class Player:
         if all(sheung is None for sheung in possible_sheungs):
             return False
 
-        raise NotImplementedError
+        return True
 
     def decide_pong(self, discarded_tile: Tiles) -> bool:
 
@@ -396,10 +383,9 @@ class Player:
                                                           self._hidden_hand[index -1] != discarded_tile):
             return False
 
-        raise NotImplementedError
-
+        return True
     def discard_tile(self, game_state: MahjongGame) -> Tiles:
-        raise NotImplementedError # implement decision making logic or player input
+        return True
 
     def add_tile(self, drawn_tile: Tiles):
         bisect.insort(self._hidden_hand, drawn_tile)
