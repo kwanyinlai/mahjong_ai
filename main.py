@@ -312,7 +312,8 @@ class Player:
         # wun yat sik
         return fan
 
-    def show_all_possible_sheungs(self, latest_tile: Tiles) -> Tuple[Tuple[int, int] | None, Tuple[int, int] | None, Tuple[int, int] | None]:
+    def show_all_possible_sheungs(self, latest_tile: Tiles) -> (Tuple[Tuple[int, int] | None,
+                                                                Tuple[int, int] | None, Tuple[int, int] | None]):
         # return a 3 item tuple with None if the corresponding sheung is not possible, else the indices in
         # self._hidden_hand of the corresponding tiles necessary to form the sheung
         # first is for lower sheung, second for middle sheung, third for upper sheung
@@ -374,8 +375,12 @@ class Player:
         raise NotImplementedError
 
     def decide_pong(self, discarded_tile: Tiles) -> bool:
-        if self._hidden_hand[discarded_tile] <= 2:
+
+        index = bisect.bisect_left(self._hidden_hand, discarded_tile)
+        if self._hidden_hand[index] != discarded_tile or (self._hidden_hand[index + 1] != discarded_tile and
+                                                          self._hidden_hand[index -1] == discarded_tile):
             return False
+
         raise NotImplementedError
 
     def discard_tile(self, game_state: MahjongGame) -> Tiles:
