@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import bisect
 from typing import Union, List, Optional, Tuple
 
 
@@ -74,11 +75,12 @@ class MahjongGame:
 
     def __init__(self):
         self.players = [Player(i) for i in range(4)]
-        self.tiles = self.initialize_tiles()
+        self.tiles = MahjongGame.initialize_tiles()
         self.setup_game()
         print(len(self.tiles))
 
-    def initialize_tiles(self) -> List[Tiles]:
+    @staticmethod
+    def initialize_tiles() -> List[Tiles]:
         tiles = []
         for suit in ('circle', 'bamboo', 'number'):
             for i in range(1,10):
@@ -267,7 +269,7 @@ class Player:
             raise IndexError
 
     @staticmethod
-    def check_sheung(remaining_hand: dict[Tiles, int], selected_tile: Tiles, potential_hand: List[List[Tiles]]):
+    def check_sheung(remaining_hand: List[Tiles], selected_tile: Tiles, potential_hand: List[List[Tiles]]):
         # only check ascending sheung for consistency
         # assumes the tile exists in the remaining hand
         # mutates if True
@@ -275,8 +277,7 @@ class Player:
         second_tile = Tiles(tiletype=selected_tile.tiletype, subtype=selected_tile.subtype, numchar=selected_tile.numchar + 2)
         if selected_tile.tiletype == "suit" and selected_tile.numchar <= 7:
             if any(first_tile == tile for tile, count in remaining_hand.items() if count >= 1):
-                if any(second_tile == tile
-                       for tile, count in remaining_hand.items() if count >= 1):
+                if any(second_tile == tile for tile in remaining_hand):
                     remaining_hand[selected_tile] -= 1
                     remaining_hand[first_tile] -= 1
                     remaining_hand[second_tile] -= 1
@@ -311,18 +312,46 @@ class Player:
         # wun yat sik
         return fan
 
-    def show_all_possible_sheungs(self, latest_tile: Tiles) -> Tuple[bool, bool, bool]:
-        # first bool is for lower sheung, second bool for middle sheung, third bool for upper sheung
-        possible_sheungs = []
-        i = 0
+    def show_all_possible_sheungs(self, latest_tile: Tiles) -> Tuple[Tuple[int, int] | None, Tuple[int, int] | None, Tuple[int, int] | None]:
+        # return a 3 item tuple with None if the corresponding sheung is not possible, else the indices in
+        # self._hidden_hand of the corresponding tiles necessary to form the sheung
+        # first is for lower sheung, second for middle sheung, third for upper sheung
+        sequenced_tiles = [-1, -1, -1, -1]
 
-        above_tile = Tiles(tiletype=latest_tile.tiletype, numchar=latest_tile.numchar + 1, subtype=latest_tile.subtype)
-        below_tile = Tiles(tiletype=latest_tile.tiletype, numchar=latest_tile.numchar - 1, subtype=latest_tile.subtype)
-        while self._hidden_hand[i] != above_tile and self._hidden_hand[i] != below_tile:
-            i+=1
+        # binary search
+        index = bisect.bisect_right(self._hidden_hand,
+                                    Tiles(tiletype=latest_tile.tiletype,
+                                         subtype=latest_tile.subtype,
+                                         numchar=latest_tile.numchar - 2)
+                                    )
+        upper_bound =  Tiles(tiletype=latest_tile.tiletype,
+                                         subtype=latest_tile.subtype,
+                                         numchar=latest_tile.numchar + 2)
+        while index < len(self._hidden_hand) and self._hidden_hand[index] < upper_bound:
+            if self._hidden_hand[index].numchar == latest_tile.numchar - 2:
+                sequenced_tiles[0] = index
+            elif self._hidden_hand[index].numchar == latest_tile.numchar - 1:
+                sequenced_tiles[1] = index
+            elif self._hidden_hand[index].numchar == latest_tile.numchar + 1:
+                sequenced_tiles[2] = index
+            elif self._hidden_hand[index].numchar == latest_tile.numchar + 2:
+                sequenced_tiles[3] = index
+            index += 1
 
+        if sequenced_tiles[0] == -1 or sequenced_tiles[1] == -1:
+            lower_sheung = None
+        else:
+            lower_sheung = [sequenced_tiles[0], sequenced_tiles[1]]
+        if sequenced_tiles[2] == -1 or sequenced_tiles[1] == -1:
+            mid_sheung = None
+        else:
+            mid_sheung = [sequenced_tiles[1], sequenced_tiles[2]]
+        if sequenced_tiles[3] == -1 or sequenced_tiles[2] == -1:
+            high_sheung = None
+        else:
+            high_sheung = [sequenced_tiles[2], sequenced_tiles[3]]
 
-        return possible_sheungs
+        return lower_sheung, mid_sheung, high_sheung
 
 
 
@@ -353,10 +382,7 @@ class Player:
         raise NotImplementedError # implement decision making logic or player input
 
     def add_tile(self, drawn_tile):
-        for i in range(len(self._hidden_hand)):
-            if self._hidden_hand[i] < drawn_tile:
-                self._hidden_hand.insert(i, drawn_tile)
-        self._hidden_hand.append(drawn_tile)
+        bisect.insort(self._hidden_hand, drawn_tile)
 
 
 if __name__ == "__main__":
