@@ -64,6 +64,13 @@ class MahjongTile:
         return self.numchar < other.numchar
         # TODO: Fix compatability with 'season' and 'flower' subtype
 
+    def __le__(self, other: MahjongTile):
+        suit_order = {'circle': 0, 'bamboo': 1, 'number': 2, 'wind': 3, 'dragon': 4, 'flower': 5, 'season': 6}
+        if self.subtype != other.subtype:
+            return suit_order[self.subtype] <= suit_order[other.subtype]
+        return self.numchar <= other.numchar
+        # TODO: Fix compatability with 'season' and 'flower' subtype
+
 
 class MahjongGame:
     """
@@ -99,9 +106,12 @@ class MahjongGame:
         tile6 = MahjongTile(tiletype="suit", subtype="circle", numchar=7)
         tile7 = MahjongTile(tiletype="suit", subtype="number", numchar=3)
         tile8 = MahjongTile(tiletype="honour", subtype="dragon", numchar="white")
-        tile9 = MahjongTile(tiletype="suit", subtype="circle", numchar=6)
+        tile9 = MahjongTile(tiletype="suit", subtype="number", numchar=6)
         player1.hidden_hand = [tile1, tile2, tile3, tile4, tile5, tile6, tile7, tile7, tile7, tile8, tile8, tile8,
                                tile9, tile9]
+
+        player1.hidden_hand.sort()
+
         print(player1.check_winning_hand())
 
     @staticmethod
@@ -300,8 +310,11 @@ class Player:
             if self.hidden_hand[i + 1] == tile:  # check all possible combinations of 'eyes' first for efficiency
                 remaining_hand = self.hidden_hand.copy()
                 potential_hand.append([remaining_hand.pop(i), remaining_hand.pop(i)])
-                print("are we getting here")
-                print(potential_hand[0][0])
+                print("POTENTIAL")
+                for tile_set in potential_hand:
+                    for tile in tile_set:
+                        print(tile)
+                print("end")
                 if self.can_fit_into_set(remaining_hand, potential_hand):
                     potential_hand += self.revealed_sets
                     possible_hands.append(potential_hand)
@@ -347,27 +360,35 @@ class Player:
         """
 
         #TODO: THIS FUNCITON NEEDS FIXING
-        print("UP!!!")
         if not (selected_tile.tiletype == "suit" and selected_tile.numchar <= 7):
             return False
+        print("CURRENT HAND")
+        for tile in remaining_hand:
+            print(tile)
+        print("END")
+        print("SELECTED TILE IS " + str(selected_tile))
         index = bisect.bisect_left(remaining_hand, selected_tile)
+
+
         indices = [index, -1, -1]
         target_tile = MahjongTile(tiletype=selected_tile.tiletype,
                                   subtype=selected_tile.subtype,
                                   numchar=selected_tile.numchar + 2)
-        while index < len(remaining_hand) and remaining_hand[index] < target_tile:
-            if remaining_hand[index].numchar == target_tile.numchar + 1:
-                indices = index
-            elif remaining_hand[index].numchar == target_tile.numchar + 2:
-                indices = index
+
+        while index < len(remaining_hand) and remaining_hand[index] <= target_tile:
+            if remaining_hand[index].numchar == selected_tile.numchar + 1:
+                indices[1] = index
+            elif remaining_hand[index].numchar == selected_tile.numchar + 2:
+                indices[2] = index
             index += 1
 
         if indices[1] == -1 or indices[2] == -1:
             return False
         else:
+            print("SHEUNG WORKS")
             potential_hand.append([remaining_hand.pop(indices[0]),
-                                   remaining_hand.pop(indices[0] - 1),
-                                   remaining_hand.pop(indices[1] - 2)])
+                                   remaining_hand.pop(indices[1] - 1),
+                                   remaining_hand.pop(indices[2] - 2)])
             return True
 
     @staticmethod
@@ -468,7 +489,6 @@ class Player:
         """
         if not self.check_winning_hand():
             return False
-        print("asdfagasd")
         return True
         # mutate game_state.game_over to determine whether the win is claimed
 
