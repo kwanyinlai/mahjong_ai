@@ -261,6 +261,7 @@ class MahjongGame:
 
             last_tile = player_redraw.hidden_hand.pop()
             while last_tile.tiletype == 'flower':
+                player_redraw.flowers.append(last_tile)
                 print("FLOWER REDRAW PLAYER " + str(player_redraw.player_id))
                 last_tile = self.draw_tile()
 
@@ -384,7 +385,7 @@ class Player:
         """
         drawn_tile = game_state.draw_tile()
         while drawn_tile.subtype in ('flower', 'season'):
-            self.revealed_sets.append([drawn_tile])
+            self.flowers.append(drawn_tile)
             drawn_tile = game_state.draw_tile()
         if self.decide_add_kong(drawn_tile):
             print("YOU KONGED")
@@ -485,13 +486,23 @@ class Player:
             return True
 
     @staticmethod
-    def filter_by_fan(self, potential_hand: List[List[MahjongTile]], wind) -> int:
+    def filter_by_fan(self, potential_hand: List[List[MahjongTile]], circle_wind, player_wind, flowers) -> int:
         """
         Sort the winning hands by number of fan
         """
         fan = 0
         # check flowers TODO: Figure out later
-        # count honours
+        if len(flowers) == 0:
+            fan += 1
+        elif flowers <= ('plum', 'orchid', 'chrysanthemum', 'bamboo'):
+            fan += 2
+        elif flowers <= ('summer', 'spring', 'autumn', 'winter'):
+            fan += 2
+        elif True:
+            pass
+            # check flower number
+
+
         honour_sets = []
         wind_sets = []
 
@@ -502,32 +513,44 @@ class Player:
             elif potential_hand[i][0].subtype == 'wind':
                 wind_sets.append(potential_hand.pop(i))
             i += 1
-        # great dragon
 
-        # TODO: Figure out later
-        # small dragon
-        # TODO: Figure out later
-        # count honour by fan
-        fan += len([full_set for full_set in honour_sets if len(full_set) > 2])
-        # check wind (current wind)
-        fan += len([full_set for full_set in honour_sets if len(full_set) > 2 and full_set[0].numchar == wind])
-        # great winds
-        # TODO: Figure out later
-        # small winds
-        # TODO: Figure out later
-        # dui dui wu
-        if all(first_tile == second_tile for first_tile, second_tile in potential_hand):
-            fan += 3
-            # assuming possible hands is structured correctly and can only contain a straight or a triplet
-        elif all(first_tile.numchar == second_tile.numchar + 1 for first_tile, second_tile in potential_hand):  #ping wu
-            fan += 1  # need to isolate the eye somehow
-        # qing yat sik
+        if len(honour_sets) == 3 and all(len(full_set) == 3 for full_set in honour_sets):
+            fan += 8
+            return fan
+        elif len(honour_sets) == 3:
+            fan += 5
+        else:
+            fan += len([full_set for full_set in honour_sets if len(full_set) > 2])
+
+        if len(wind_sets) == 4 and all(len(full_set) == 3 for full_set in wind_sets):
+            fan += 13
+            return fan
+        elif len(wind_sets) == 4:
+            fan += 6
+        else:
+            if any(full_set == circle_wind and len(full_set) == 3 for full_set in wind_sets):
+                fan += 1
+            elif any(full_set == player_wind and len(full_set) == 3 for full_set in wind_sets):
+                fan += 1
+
         if all(potential_hand[i][0].subtype == potential_hand[i + 1][0].subtype for i in
                range(0, len(potential_hand) - 1)):
             if len(honour_sets) == 0 and len(wind_sets) == 0:
                 fan += 5
             else:
                 fan += 3
+
+        i = 0
+        while len(potential_hand[i]) != 2:
+            i += 1
+        potential_hand.pop(i)  # remove the eye
+
+        # dui dui wu
+        if all(first_tile == second_tile for first_tile, second_tile in potential_hand):
+            fan += 3
+            # assuming possible hands is structured correctly and can only contain a straight or a triplet
+        elif all(first_tile.numchar == second_tile.numchar + 1 for first_tile, second_tile in potential_hand):  #ping wu
+            fan += 1
 
         return fan
 
