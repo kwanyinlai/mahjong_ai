@@ -1,11 +1,4 @@
 import random
-import bisect
-from typing import List, Tuple
-
-from main import Tiles, MahjongGame
-
-
-
 
 
 
