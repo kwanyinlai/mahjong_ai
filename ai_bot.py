@@ -14,13 +14,16 @@ class Player:
     """
     player_id: int
     hidden_hand: List[MahjongTile]  # assume sorted
-    revealed_sets: List[List[MahjongTile]] = []
-    flowers: List[MahjongTile] = []
-    discard_pile: List[MahjongTile] = []
+    revealed_sets: List[List[MahjongTile]]
+    flowers: List[MahjongTile]
+    discard_pile: List[MahjongTile]
 
     def __init__(self, player_id):
         self.player_id = player_id
         self.hidden_hand = []
+        self.revealed_sets = []
+        self.flowers = []
+        self.discard_pile = []
         self.total_score = 0
 
     def check_claims(self, current_player: Player, latest_tile: MahjongTile = None) -> Tuple[bool, bool, bool]:
@@ -236,12 +239,13 @@ class Player:
                 fan += 3
 
         i = 0
+        # TODO: idk why this is bugged
         while i < len(potential_hand) and len(potential_hand[i]) != 2:
             i += 1
         potential_hand.pop(i)  # remove the eye
 
         # dui dui wu
-        if all(tile[0] == tile[1] for tile in potential_hand): # TODO: Bugged with unpacking
+        if all(tile[0] == tile[1] for tile in potential_hand):
             fan += 3
             # assuming possible hands is structured correctly and can only contain a straight or a triplet
         elif all(tile[0].numchar == tile[1].numchar + 1 for tile in
@@ -320,13 +324,14 @@ class Player:
         Base functions check if a win is can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not
         """
+
         self.add_tile(latest_tile)
         if not self.check_winning_hand():
             self.hidden_hand.remove(latest_tile)
             return False
         return True
 
-    def decide_sheung(self, latest_tile: MahjongTile) -> bool:
+    def decide_sheung(self, latest_tile: MahjongTile) -> Tuple[int, int]:
         """
         Base functions check if a sheung can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not and
@@ -369,10 +374,16 @@ class Player:
         """
         Add the tile to the hand in a sorted order
         """
-        if len(self.hidden_hand) > 14 or drawn_tile.tiletype == "flower":
-            print("ERROR")
-            print(self.player_id)
         bisect.insort(self.hidden_hand, drawn_tile)
+        # if len(self.hidden_hand) + 3*len(self.revealed_sets) != 14:
+        #     print("ERROR FOR PLAYER" + str(self.player_id))
+        #     self.print_hand()
+        #     print("REVEALED")
+        #     for subset in self.revealed_sets:
+        #         print("SET START")
+        #         for tile in subset:
+        #             print(tile)
+        #         print("SET END")
 
     def print_hand(self):
         """
@@ -382,6 +393,12 @@ class Player:
         for tile in self.hidden_hand:
             print(tile)
         print("==================")
+        print("REVEALED SETS")
+        for subset in self.revealed_sets:
+            print("SET START")
+            for tile in subset:
+                print(tile)
+            print("SET END")
 
 
 class RandomBot(Player):
@@ -427,11 +444,6 @@ class YesBot(Player):
     def decide_pong(self, tile: MahjongTile):
         if not super().decide_pong(tile):
             return False
-
-        self.hidden_hand.remove(tile)
-        self.hidden_hand.remove(tile)  # TODO: im lazy to implement efficient removal right now using sorted
-        self.revealed_sets.append([tile, tile, tile])
-
         return True
 
     def decide_add_kong(self, latest_tile) -> bool:
@@ -502,8 +514,6 @@ class BasicBot(Player):
         self.discard_pile.append(discarded_tile)
         return discarded_tile
 
-
-
     def calculate_tiles_required(self, hand, removed_tile) -> int:
         """
         Return the tiles required to complete the hand
@@ -514,7 +524,6 @@ class BasicBot(Player):
         pair = False
         complete_sets = 0
         incomplete_sets = 0
-
 
         while i < len(hand_copy) - 2:
             if hand_copy[i] == hand_copy[i + 1]:
@@ -530,10 +539,10 @@ class BasicBot(Player):
                     else:
                         incomplete_sets += 1
                 pass
-            elif (hand_copy[i].subtype == "suit" and hand_copy[i].subtype == hand_copy[i + 1].subtype and
-                  hand_copy[i].numchar == hand_copy[i + 1].numchar + 1):
+            elif (hand_copy[i].tiletype == "suit" and hand_copy[i].subtype == hand_copy[i + 1].subtype and
+                  hand_copy[i].numchar == hand_copy[i + 1].numchar - 1):
                 if (hand_copy[i].subtype == hand_copy[i + 2].subtype and hand_copy[i].numchar ==
-                        hand_copy[i + 2].numchar + 2):
+                        hand_copy[i + 2].numchar - 2):
                     complete_sets += 1
                     for j in range(3):
                         hand_copy.pop(i)
@@ -542,9 +551,9 @@ class BasicBot(Player):
                         hand_copy.pop(i)
                     incomplete_sets += 1
             else:
-                 i += 1
-        # print("COMPLETE SETS: " + str(complete_sets))
-        # print("INCOMPLETE SETS: " + str(incomplete_sets))
+                i += 1
+        print("COMPLETE SETS: " + str(complete_sets))
+        print("INCOMPLETE SETS: " + str(incomplete_sets))
         return 8 - (2 * complete_sets) - incomplete_sets - int(pair)
 
 # class Agent:
