@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Union
+from typing import List, Union
+
+import numpy as np
 
 
 class MahjongTile:
@@ -68,3 +70,17 @@ class MahjongTile:
             return suit_order[self.subtype] <= suit_order[other.subtype]
         return self.numchar <= other.numchar
         # TODO: Fix compatability with 'season' and 'flower' subtype
+
+    def to_index(self):
+        if self.subtype == "circle":
+            return self.numchar - 1
+        elif self.subtype == "bamboo":
+            return 9 + (self.numchar - 1)
+        elif self.subtype == "number":
+            return 18 + (self.numchar - 1)
+        elif self.subtype == "wind":
+            wind_order = {"east": 27, "south": 28, "west": 29, "north": 30}
+            return wind_order[self.numchar]
+        elif self.subtype == "dragon":
+            dragon_order = {"red": 31, "green": 32, "white": 33}
+            return dragon_order[self.numchar]
