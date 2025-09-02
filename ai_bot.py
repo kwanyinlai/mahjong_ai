@@ -27,8 +27,8 @@ class RandomBot(Player):
 
         return is_kong
 
-    def decide_win(self, latest_tile, state: np.array = None):
-        return super().decide_win(latest_tile)
+    def decide_win(self, latest_tile, circle_wind, player_number, state: np.array = None):
+        return super().decide_win(latest_tile, circle_wind, player_number)
 
     def decide_sheung(self, latest_tile, state: np.array = None) -> Tuple[int, int] | None:
         possible_sheungs = self.show_all_possible_sheungs(latest_tile)
@@ -43,10 +43,8 @@ class RandomBot(Player):
 
     def discard_tile(self, state: np.array = None) -> MahjongTile:
         removed_tile = random.choice(self.hidden_hand)
-        self.hidden_hand.remove(removed_tile)
         print("PLAYER " + str(self.player_id) + " DISCARDED")
         print(removed_tile)
-        self.discard_pile.append(removed_tile)
         return removed_tile
 
 
@@ -61,8 +59,8 @@ class YesBot(Player):
             return False
         return True
 
-    def decide_win(self, latest_tile, state: np.array = None):
-        return super().decide_win(latest_tile)
+    def decide_win(self, latest_tile,  circle_wind, player_number, state: np.array = None):
+        return super().decide_win(latest_tile, circle_wind, player_number)
 
     def decide_sheung(self, latest_tile, state: np.array = None) -> Tuple[int, int] | None:
         possible_sheungs = self.show_all_possible_sheungs(latest_tile)
@@ -75,10 +73,6 @@ class YesBot(Player):
 
     def discard_tile(self, state: np.array = None) -> MahjongTile:
         removed_tile = random.choice(self.hidden_hand)
-        self.hidden_hand.remove(removed_tile)
-        print("PLAYER " + str(self.player_id) + " DISCARDED")
-        print(removed_tile)
-        self.discard_pile.append(removed_tile)
         return removed_tile
 
 
@@ -95,8 +89,8 @@ class BasicBot(Player):
             return False
         return True
 
-    def decide_win(self, latest_tile, state: np.array = None):
-        return super().decide_win(latest_tile)
+    def decide_win(self, latest_tile, circle_wind, player_number, state: np.array = None):
+        return super().decide_win(latest_tile, circle_wind, player_number)
 
     def decide_sheung(self, latest_tile, state: np.array = None) -> Tuple[int, int] | None:
         possible_sheungs = self.show_all_possible_sheungs(latest_tile)
@@ -159,8 +153,6 @@ class BasicBot(Player):
                     incomplete_sets += 1
             else:
                 i += 1
-        print("COMPLETE SETS: " + str(complete_sets))
-        print("INCOMPLETE SETS: " + str(incomplete_sets))
         return 8 - (2 * complete_sets) - incomplete_sets - int(pair)
 
 

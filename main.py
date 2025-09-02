@@ -1,8 +1,11 @@
+from ai_bot import BasicBot
 from mahjong_game import MahjongGame
-
+from mahjong_table import MahjongTable
 
 if __name__ == "__main__":
-    game = MahjongGame()
+    # table = MahjongTable()
+    # table.start_table()
+    game = MahjongGame([BasicBot(i) for i in range(4)], "east")
     game.play_round()
 
     # while not game.win:

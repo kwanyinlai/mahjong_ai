@@ -26,14 +26,17 @@ class MahjongGame:
     game_over: bool
     winner: Player = None
     log: List[Dict]
+    circle_wind: str
 
-    def __init__(self, players: List[Player]):
+    def __init__(self, players: List[Player], circle_wind):
         self.players = players
         self.log = []  # {id, state, broad decision, decision value, reward, next state, game over}
         self.tiles = MahjongGame.initialize_tiles()
         self.setup_game()
         self.discarded_tiles = []
         self.game_over = False
+        self.circle_wind = circle_wind
+
 
     @staticmethod
     def initialize_tiles() -> List[MahjongTile]:
@@ -44,7 +47,7 @@ class MahjongGame:
         for suit in ('circle', 'bamboo', 'number'):
             for i in range(1, 10):
                 for j in range(1, 5):
-                    tiles.append(MahjongTile(tiletype='suit', subtype=suit, numchar=j))
+                    tiles.append(MahjongTile(tiletype='suit', subtype=suit, numchar=i))
 
         for colour in ('red', 'green', 'white'):
             for i in range(0, 4):
@@ -90,7 +93,7 @@ class MahjongGame:
                 last_tile = player_redraw.hidden_hand.pop()
                 while last_tile.tiletype == 'flower':
                     player_redraw.flowers.append(last_tile)
-                    print("FLOWER REDRAW PLAYER " + str(player_redraw.player_id))
+                    # print("FLOWER REDRAW PLAYER " + str(player_redraw.player_id))
                     last_tile = self.tiles.pop()
             player_redraw.add_tile(last_tile)
 
@@ -98,7 +101,8 @@ class MahjongGame:
         """
         Shuffle tiles and deal them to players
         """
-        print("SETUP")
+        # print("SETUP")
+
         random.shuffle(self.tiles)
         self.initialise_player_hands(0)
         self.current_player_no = 0
@@ -107,9 +111,8 @@ class MahjongGame:
 
         if self.discard_tile(self.current_player) is not None:
             self.game_over = True  # todo: why??
-        for player in self.players:
-            player.print_hand()
-        print("SETUP COMPLETE")
+
+        # print("SETUP COMPLETE")
 
     # GAMEPLAY ===========================================================================
     # ====================================================================================
@@ -121,9 +124,9 @@ class MahjongGame:
         :return:
         """
         temp_number = self.current_player_no
-        for _ in range(4):
+        for i in range(4):
             win_claim, pong_claim, add_kong_claim = (
-                self.players[temp_number].check_claims(self.latest_tile, state))
+                self.players[temp_number].check_claims(self.circle_wind, i, self.latest_tile, state))
 
             if win_claim:
                 self.game_over = True
@@ -156,19 +159,21 @@ class MahjongGame:
                     "next_state": next_state,
                     "gameover": False
                 })
-
+                print("KONG")
+                print(self.latest_tile)
                 self.discard_tile(self.players[temp_number])
                 self.next_turn(temp_number)
                 return True
             elif pong_claim:
                 print("PONG")
+                print(self.latest_tile)
                 for _ in range(2):
                     self.players[temp_number].hidden_hand.remove(self.latest_tile)
                 self.players[temp_number].revealed_sets.append([self.latest_tile,
                                                                 self.latest_tile,
                                                                 self.latest_tile])
 
-                print(self.players[temp_number].player_id)
+                # print(self.players[temp_number].player_id)
                 next_state = self.get_state()
                 self.log.append({
                     "player_id": self.current_player.player_id,
@@ -195,10 +200,12 @@ class MahjongGame:
         while not self.game_over and len(self.tiles) != 0:
             state = self.get_state()
             action_taken = self.check_interrupt(state)
-            print(action_taken)
+            # print(action_taken)
             if not action_taken:
                 sheung = self.current_player.decide_sheung(self.latest_tile, state)
                 if sheung is not None:
+                    print("SHEUNG")
+                    print(self.latest_tile)
                     sheung_tiles = [self.current_player.hidden_hand[sheung[0]],
                                     self.current_player.hidden_hand[sheung[1]]
                                     ]
@@ -225,6 +232,7 @@ class MahjongGame:
 
             self.next_turn()
 
+
         if len(self.tiles) == 0:
             print("==================")
             print("GAME DRAW")
@@ -247,15 +255,15 @@ class MahjongGame:
         while drawn_tile.tiletype == "flower" and len(self.tiles) != 0:
             player.flowers.append(drawn_tile)
             drawn_tile = self.tiles.pop()
-            print("REDRAW FLOWER")
-        if player.decide_win(drawn_tile):
+            # print("REDRAW FLOWER")
+        if player.decide_win(drawn_tile, self.circle_wind, self.current_player_no):
             self.game_over = True
             self.winner = player
             print("WINNN")
             print(player.player_id)
             return None
         player.add_tile(drawn_tile)
-        print("Player " + str(player.player_id) + " put the following tile into your hand")
+        # print("Player " + str(player.player_id) + " put the following tile into your hand")
         print(drawn_tile)
 
         return drawn_tile
@@ -265,10 +273,14 @@ class MahjongGame:
         Add the latest tile to the discarded pile and set the latest discarded tile
         to this
         """
+
         discarded_tile = player.discard_tile(state)
+        print("HI")
+        print(discarded_tile)
         self.latest_tile = discarded_tile
         self.discarded_tiles.append(discarded_tile)
-        player.hidden_hand.remove(discarded_tile)
+
+        player.hidden_hand.remove(discarded_tile)  # TODO: ValueError: list.remove(x): x not in list
         print("PLAYER " + str(player.player_id) + " DISCARDED")
         print(discarded_tile)
         player.discard_pile.append(discarded_tile)

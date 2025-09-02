@@ -27,7 +27,16 @@ class Player:
         self.discard_pile = []
         self.total_score = 0
 
-    def check_claims(self, latest_tile: MahjongTile = None, state: np.ndarray = None) -> Tuple[bool, bool, bool]:
+
+    def soft_reset(self):
+        self.hidden_hand = []
+        self.revealed_sets = []
+        self.flowers = []
+        self.discard_pile = []
+
+
+    def check_claims(self, circle_wind, player_number, latest_tile: MahjongTile = None,
+                     state: np.ndarray = None) -> Tuple[bool, bool, bool]:
         """
         WIN_CLAIM
         PONG
@@ -35,7 +44,7 @@ class Player:
         SHEUNG
         DISCARD
         """
-        if self.decide_win(latest_tile, state):
+        if self.decide_win(latest_tile, circle_wind, player_number, state):
             return True, False, False
         if latest_tile is not None:
             if self.decide_pong(latest_tile, state):
@@ -61,14 +70,14 @@ class Player:
         self.hidden_hand = [tile1, tile1, tile2, tile2, tile2, tile3, tile4, tile4, tile5, tile5, tile5, tile5, tile5,
                             tile6, tile9, tile9, tile9]
 
-    def check_winning_hand(self) -> bool:
+    def check_winning_hand(self, circle_wind: str, player_number: int) -> bool:
         """
         Check whether the player currently has a winning hand
         """
         possible_hands = []
         i = 0
-        while i < len(self.hidden_hand) - 1:  # TODO: stuck in a loop here (idk if it's looped rn so hold on to
-            tile = self.hidden_hand[i]  # TODO: this thought)
+        while i < len(self.hidden_hand) - 1:
+            tile = self.hidden_hand[i]
             potential_hand = []
             if self.hidden_hand[i + 1] == tile:  # check all possible combinations of 'eyes' first for efficiency
                 remaining_hand = self.hidden_hand.copy()
@@ -80,7 +89,7 @@ class Player:
 
             i += 1
 
-        possible_hands = sorted(possible_hands, key=lambda hand: Player.score_hand(hand, self.flowers, "east", 0))
+        possible_hands = sorted(possible_hands, key=lambda hand: Player.score_hand(hand, self.flowers, circle_wind, 0))
         # TODO: Scoring is not rigorously tested yet but should work
         return possible_hands != []
 
@@ -154,7 +163,10 @@ class Player:
         ordered_flower = ['plum', 'orchid', 'chrysanthemum', 'bamboo']
         ordered_season = ['summer', 'spring', 'autumn', 'winter']
         ordered_cardinal = ['east', 'south', 'west', 'north']
-
+        # TODO: Need a potential faan function which finds completed sets
+        # TODO: Maybe use my check winning hands function but don't discard
+        # TODO: incomplete hands and just toss away the incomplete part and return
+        # TODO: the fan score of the remaining hand and the distance from completion.
         if len(flowers) == 0:
             fan += 1
         elif ['plum', 'orchid', 'chrysanthemum', 'bamboo'] <= [flower.numchar for flower in flowers]:
@@ -206,16 +218,16 @@ class Player:
 
         i = 0
 
-        while i < len(potential_hand) and len(potential_hand[i]) != 2:
+        while i < len(potential_hand) and len(potential_hand[i]) < 2:
             i += 1
         potential_hand.pop(i)  # remove the eye
 
         # dui dui wu
         if all(tile[0] == tile[1] for tile in potential_hand):
             fan += 3
-            # assuming possible hands is structured correctly and can only contain a straight or a triplet
-        elif all(tile[0].numchar == tile[1].numchar + 1 for tile in
-                 potential_hand):  #ping wu
+        # assuming possible hands is structured correctly and can only contain a straight or a triplet
+        elif all(tile[0].tiletype == "suit" and tile[1].tiletype == "suit" and
+                 tile[0].numchar == tile[1].numchar + 1 for tile in potential_hand):  #ping wu
             fan += 1
 
         return fan
@@ -285,14 +297,14 @@ class Player:
 
         return True
 
-    def decide_win(self, latest_tile, state: np.array = None) -> bool:
+    def decide_win(self, latest_tile, circle_wind, player_number, state: np.array = None) -> bool:
         """
         Base functions check if a win is can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not
         """
 
         self.add_tile(latest_tile)
-        if not self.check_winning_hand():
+        if not self.check_winning_hand(circle_wind, player_number):
             self.hidden_hand.remove(latest_tile)
             return False
         return True
