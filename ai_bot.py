@@ -2,20 +2,24 @@ from __future__ import annotations
 
 import math
 import random
+
+import numpy as np
+
 from player import Player
 from typing import Tuple
 
 from tile import MahjongTile
 
+
 class RandomBot(Player):
-    def decide_pong(self, tile: MahjongTile):
+    def decide_pong(self, tile: MahjongTile, state: np.array = None):
         if not super().decide_pong(tile):
             return False
         is_pong = random.choice([True, False])
 
         return is_pong
 
-    def decide_add_kong(self, latest_tile) -> bool:
+    def decide_add_kong(self, latest_tile, state: np.array = None) -> bool:
         if not super().decide_add_kong(latest_tile):
             return False
 
@@ -23,10 +27,10 @@ class RandomBot(Player):
 
         return is_kong
 
-    def decide_win(self, latest_tile):
+    def decide_win(self, latest_tile, state: np.array = None):
         return super().decide_win(latest_tile)
 
-    def decide_sheung(self, latest_tile) -> Tuple[int, int] | None:
+    def decide_sheung(self, latest_tile, state: np.array = None) -> Tuple[int, int] | None:
         possible_sheungs = self.show_all_possible_sheungs(latest_tile)
         if all(sheung is None for sheung in possible_sheungs):
             return None
@@ -37,7 +41,7 @@ class RandomBot(Player):
 
         return None
 
-    def discard_tile(self) -> MahjongTile:
+    def discard_tile(self, state: np.array = None) -> MahjongTile:
         removed_tile = random.choice(self.hidden_hand)
         self.hidden_hand.remove(removed_tile)
         print("PLAYER " + str(self.player_id) + " DISCARDED")
@@ -47,20 +51,20 @@ class RandomBot(Player):
 
 
 class YesBot(Player):
-    def decide_pong(self, tile: MahjongTile):
+    def decide_pong(self, tile: MahjongTile, state: np.array = None):
         if not super().decide_pong(tile):
             return False
         return True
 
-    def decide_add_kong(self, latest_tile) -> bool:
+    def decide_add_kong(self, latest_tile, state: np.array = None) -> bool:
         if not super().decide_add_kong(latest_tile):
             return False
         return True
 
-    def decide_win(self, latest_tile):
+    def decide_win(self, latest_tile, state: np.array = None):
         return super().decide_win(latest_tile)
 
-    def decide_sheung(self, latest_tile) -> Tuple[int, int] | None:
+    def decide_sheung(self, latest_tile, state: np.array = None) -> Tuple[int, int] | None:
         possible_sheungs = self.show_all_possible_sheungs(latest_tile)
 
         if all(sheung is None for sheung in possible_sheungs):
@@ -69,7 +73,7 @@ class YesBot(Player):
         decided_sheung = random.choice([indices for indices in possible_sheungs if indices is not None])
         return decided_sheung
 
-    def discard_tile(self) -> MahjongTile:
+    def discard_tile(self, state: np.array = None) -> MahjongTile:
         removed_tile = random.choice(self.hidden_hand)
         self.hidden_hand.remove(removed_tile)
         print("PLAYER " + str(self.player_id) + " DISCARDED")
@@ -80,21 +84,21 @@ class YesBot(Player):
 
 class BasicBot(Player):
 
-    def decide_pong(self, tile: MahjongTile):
+    def decide_pong(self, tile: MahjongTile, state: np.array = None):
         if not super().decide_pong(tile):
             return False
 
         return True
 
-    def decide_add_kong(self, latest_tile) -> bool:
+    def decide_add_kong(self, latest_tile, state: np.array = None) -> bool:
         if not super().decide_add_kong(latest_tile):
             return False
         return True
 
-    def decide_win(self, latest_tile):
+    def decide_win(self, latest_tile, state: np.array = None):
         return super().decide_win(latest_tile)
 
-    def decide_sheung(self, latest_tile) -> Tuple[int, int] | None:
+    def decide_sheung(self, latest_tile, state: np.array = None) -> Tuple[int, int] | None:
         possible_sheungs = self.show_all_possible_sheungs(latest_tile)
 
         if all(sheung is None for sheung in possible_sheungs):
@@ -103,7 +107,7 @@ class BasicBot(Player):
         decided_sheung = random.choice([indices for indices in possible_sheungs if indices is not None])
         return decided_sheung
 
-    def discard_tile(self) -> MahjongTile:
+    def discard_tile(self, state: np.array = None) -> MahjongTile:
 
         lowest_tile_needed = math.inf
         discarded_tile = None
@@ -114,10 +118,7 @@ class BasicBot(Player):
             if tile_needed < lowest_tile_needed:
                 discarded_tile = tile
                 lowest_tile_needed = tile_needed
-        self.hidden_hand.remove(discarded_tile)
-        print("PLAYER " + str(self.player_id) + " DISCARDED")
-        print(discarded_tile)
-        self.discard_pile.append(discarded_tile)
+
         return discarded_tile
 
     def calculate_tiles_required(self, hand, removed_tile) -> int:
@@ -162,15 +163,11 @@ class BasicBot(Player):
         print("INCOMPLETE SETS: " + str(incomplete_sets))
         return 8 - (2 * complete_sets) - incomplete_sets - int(pair)
 
-# class Agent:
-#     pass
-#
-#
-# class PerfectInfoRL(Agent):
-#     pass
-#
-#     def convert_to_vector(self):
-#
+
+
+
+
+
 
 
 # function to discourage showing hand

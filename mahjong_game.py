@@ -32,39 +32,219 @@ class MahjongGame:
         self.discarded_tiles = []
         self.game_over = False
 
-    def get_state(self, player_id: int) -> np.ndarray:
-        agent = self.players[player_id]
+    @staticmethod
+    def initialize_tiles() -> List[MahjongTile]:
+        """
+        Initialises the set of tiles that can be drawn in a game
+        """
+        tiles = []
+        for suit in ('circle', 'bamboo', 'number'):
+            for i in range(1, 10):
+                for j in range(1, 5):
+                    tiles.append(MahjongTile(tiletype='suit', subtype=suit, numchar=j))
 
-        hidden_hand_vec = np.concatenate(agent.encode_hidden_hand())
-        revealed_hand_vec = np.concatenate(agent.encode_revealed_hand())
+        for colour in ('red', 'green', 'white'):
+            for i in range(0, 4):
+                tiles.append(MahjongTile(tiletype='honour', subtype='dragon', numchar=colour))
 
-        # Discards
-        discards = [player.encode_discarded_pile() for player in self.players]
-        discards_vec = np.concatenate(discards)
+        for cardinality in ('north', 'south', 'east', 'west'):
+            for i in range(0, 4):
+                tiles.append(MahjongTile(tiletype='honour', subtype='wind', numchar=cardinality))
 
-        # Revealed
-        revealed_sets = [player.encode_revealed_hand() for player in self.players if player is not agent]
-        revealed_set_vec = np.concatenate(revealed_sets)
+        for flower in ('plum', 'orchid', 'chrysanthemum', 'bamboo'):
+            tiles.append(MahjongTile(tiletype='flower', subtype='flower', numchar=flower))
+        for season in ('summer', 'spring', 'autumn', 'winter'):
+            tiles.append(MahjongTile(tiletype='flower', subtype='season', numchar=season))
 
-        latest_tile_vec = np.zeros(34, dtype=int)
-        if self.latest_tile:
-            latest_tile_vec[self.latest_tile.to_index()] = 1
+        return tiles
 
-        # Opponent hands
-        opponent_hands = [player.encode_hidden_hand() for player in self.players if player is not agent]
-        opponent_hand_vec = np.concatenate(opponent_hands)
+    def initialise_players(self):
+        """
+        Add all players into the game
+        """
+        player1 = RandomBot(1)
+        player2 = RandomBot(2)
+        player3 = RandomBot(3)
+        player4 = RandomBot(4)
+        self.players = [player1, player2, player3, player4]
 
-        # Final state vector
-        state_vec = np.concatenate([
-            hidden_hand_vec,
-            revealed_hand_vec,
-            discards_vec,
-            revealed_set_vec,
-            latest_tile_vec,
-            opponent_hand_vec
-        ])
+    def initialise_player_hands(self, starting_number: int):
+        """
+        Starting number is the index of the player we start with
+        Give 13 tiles to each player, then replace with 13 tiles, and then give
+        a 14th tile to the first person to play.
+        """
+        # clear player hands
+        current_player_number = starting_number
+        while len(self.players[starting_number].hidden_hand) < 14:
+            self.players[current_player_number].add_tile(self.tiles.pop())
+            current_player_number += 1
+            current_player_number %= 4
 
-        return state_vec
+        for player_redraw in self.players:  # TODO: Fix this to go in right order, while loop ntof or loop
+            last_tile = player_redraw.hidden_hand[len(player_redraw.hidden_hand) - 1]
+            while player_redraw.hidden_hand[len(player_redraw.hidden_hand) - 1].tiletype == 'flower':
+                last_tile = player_redraw.hidden_hand.pop()
+                while last_tile.tiletype == 'flower':
+                    player_redraw.flowers.append(last_tile)
+                    print("FLOWER REDRAW PLAYER " + str(player_redraw.player_id))
+                    last_tile = self.tiles.pop()
+            player_redraw.add_tile(last_tile)
+
+    def setup_game(self):
+        """
+        Shuffle tiles and deal them to players
+        """
+        print("SETUP")
+        random.shuffle(self.tiles)
+        self.initialise_player_hands(0)
+        self.current_player_no = 0
+        self.current_player = self.players[self.current_player_no]
+        self.discarded_tiles = []
+
+        if self.discard_tile(self.current_player) is not None:
+            self.game_over = True # todo: why??
+        for player in self.players:
+            player.print_hand()
+        print("SETUP COMPLETE")
+
+    # GAMEPLAY ===========================================================================
+    # ====================================================================================
+    # ====================================================================================
+
+    def check_interrupt(self, state: np.ndarray = None) -> bool:
+        """
+        Check if interrupt
+        :return:
+        """
+        temp_number = self.current_player_no
+        state = self.get_state_representation()
+        for _ in range(4):
+
+            win_claim, pong_claim, add_kong_claim = (
+                self.players[temp_number].check_claims(self.latest_tile, state))
+
+            if win_claim:
+                self.game_over = True
+
+                return True
+            elif add_kong_claim:
+                for _ in range(3):
+                    self.players[temp_number].hidden_hand.remove(self.latest_tile)
+
+                print("KONG")
+                print(self.players[temp_number])
+                self.players[temp_number].revealed_sets.append([self.latest_tile,
+                                                                self.latest_tile,
+                                                                self.latest_tile,
+                                                                self.latest_tile])
+
+                print(self.players[temp_number].player_id)
+                self.discard_tile(self.players[temp_number])
+                self.next_turn(temp_number)
+                return True
+            elif pong_claim:
+                print("PONG")
+                for _ in range(2):
+                    self.players[temp_number].hidden_hand.remove(self.latest_tile)
+                self.players[temp_number].revealed_sets.append([self.latest_tile,
+                                                                self.latest_tile,
+                                                                self.latest_tile])
+
+                print(self.players[temp_number].player_id)
+                self.discard_tile(self.players[temp_number])
+                self.next_turn(temp_number)
+                return True
+            temp_number = (temp_number + 1) % 4
+        return False
+
+    def play_round(self):
+        """
+        Play one round of a MahjongGame to the end until a draw or win
+        """
+        self.game_over = False
+        while not self.game_over and len(self.tiles) != 0:
+            state = self.get_state_representation()
+            action_taken = self.check_interrupt(state)
+            print(action_taken)
+            if not action_taken:
+                sheung = self.current_player.decide_sheung(self.latest_tile, state)
+                if sheung is not None:
+                    sheung_tiles = [self.current_player.hidden_hand[sheung[0]],
+                                    self.current_player.hidden_hand[sheung[1]]
+                                    ]
+                    bisect.insort(sheung_tiles, self.latest_tile)
+                    self.current_player.revealed_sets.append(sheung_tiles)
+                    self.current_player.hidden_hand.pop(sheung[0])
+                    self.current_player.hidden_hand.pop(sheung[1] - 1)
+                    self.discard_tile(self.current_player, state)
+
+                else:
+                    if self.draw_tile(self.current_player) is None:
+                        break
+                    self.discard_tile(self.current_player, state)
+
+            self.next_turn()
+
+        if len(self.tiles) == 0:
+            print("==================")
+            print("GAME DRAW")
+            for player in self.players:
+                player.print_hand()
+        else:
+            print("==================")
+            print(" GAME WIN ")
+            for player in self.players:
+                player.print_hand()
+
+    def draw_tile(self, player: Player) -> MahjongTile:
+        """
+        Add a tile to the player's hands and return
+        """
+
+        drawn_tile = self.tiles.pop()
+        while drawn_tile.tiletype == "flower" and len(self.tiles) != 0:
+            player.flowers.append(drawn_tile)
+            drawn_tile = self.tiles.pop()
+            print("REDRAW FLOWER")
+        if player.decide_win(drawn_tile):
+            self.game_over = True
+            print("WINNN")
+            print(player.player_id)
+            return None
+        player.add_tile(drawn_tile)
+        print("Player " + str(player.player_id) + " put the following tile into your hand")
+        print(drawn_tile)
+
+        return drawn_tile
+
+    def discard_tile(self, player: Player, state: np.ndarray = None):
+        """
+        Add the latest tile to the discarded pile and set the latest discarded tile
+        to this
+        """
+        discarded_tile = player.discard_tile(state)
+        self.latest_tile = discarded_tile
+        self.discarded_tiles.append(discarded_tile)
+        player.hidden_hand.remove(discarded_tile)
+        print("PLAYER " + str(player.player_id) + " DISCARDED")
+        print(discarded_tile)
+        player.discard_pile.append(discarded_tile)
+
+    def next_turn(self, player_skip: Optional[int] = None):
+        """
+
+        :param player_skip:
+        """
+        if player_skip:
+            self.current_player_no = player_skip
+            self.current_player = self.players[self.current_player_no]
+        self.current_player_no = (self.current_player_no + 1) % 4
+        self.current_player = self.players[self.current_player_no]
+
+    # TESTING METHODS ====================================================================
+    # ====================================================================================
+    # ====================================================================================
 
     @staticmethod
     def test_sheung():
@@ -203,203 +383,46 @@ class MahjongGame:
         player1.hidden_hand.sort()
         print(Player.score_hand(player1.hidden_hand, player1.flowers, "east", 0))
 
-    @staticmethod
-    def initialize_tiles() -> List[MahjongTile]:
+        # STATE ===========================================================================
+
+    def get_state(self, latest_tile=None):
         """
-        Initialises the set of tiles that can be drawn in a game
-        """
-        tiles = []
-        for suit in ('circle', 'bamboo', 'number'):
-            for i in range(1, 10):
-                for j in range(1, 5):
-                    tiles.append(MahjongTile(tiletype='suit', subtype=suit, numchar=j))
 
-        for colour in ('red', 'green', 'white'):
-            for i in range(0, 4):
-                tiles.append(MahjongTile(tiletype='honour', subtype='dragon', numchar=colour))
-
-        for cardinality in ('north', 'south', 'east', 'west'):
-            for i in range(0, 4):
-                tiles.append(MahjongTile(tiletype='honour', subtype='wind', numchar=cardinality))
-
-        for flower in ('plum', 'orchid', 'chrysanthemum', 'bamboo'):
-            tiles.append(MahjongTile(tiletype='flower', subtype='flower', numchar=flower))
-        for season in ('summer', 'spring', 'autumn', 'winter'):
-            tiles.append(MahjongTile(tiletype='flower', subtype='season', numchar=season))
-
-        return tiles
-
-    def initialise_players(self):
-        """
-        Add all players into the game
-        """
-        player1 = RandomBot(1)
-        player2 = RandomBot(2)
-        player3 = RandomBot(3)
-        player4 = RandomBot(4)
-        self.players = [player1, player2, player3, player4]
-
-    def initialise_player_hands(self, starting_number: int):
-        """
-        Starting number is the index of the player we start with
-        Give 13 tiles to each player, then replace with 13 tiles, and then give
-        a 14th tile to the first person to play.
-        """
-        # clear player hands
-        current_player_number = starting_number
-        while len(self.players[starting_number].hidden_hand) < 14:
-            self.players[current_player_number].add_tile(self.tiles.pop())
-            current_player_number += 1
-            current_player_number %= 4
-
-        for player_redraw in self.players: # TODO: Fix this to go in right order, while loop ntof or loop
-            last_tile = player_redraw.hidden_hand[len(player_redraw.hidden_hand)-1]
-            while player_redraw.hidden_hand[len(player_redraw.hidden_hand)-1].tiletype == 'flower':
-                last_tile = player_redraw.hidden_hand.pop()
-                while last_tile.tiletype == 'flower':
-                    player_redraw.flowers.append(last_tile)
-                    print("FLOWER REDRAW PLAYER " + str(player_redraw.player_id))
-                    last_tile = self.tiles.pop()
-            player_redraw.add_tile(last_tile)
-
-    def setup_game(self):
-        """
-        Shuffle tiles and deal them to players
-        """
-        print("SETUP")
-        random.shuffle(self.tiles)
-        self.initialise_player_hands(0)
-        self.current_player_no = 0
-        self.current_player = self.players[self.current_player_no]
-        self.discarded_tiles = []
-
-        if self.discard_tile(self.current_player.discard_tile()) is not None:
-            self.game_over = True
-        for player in self.players:
-            player.print_hand()
-        print("SETUP COMPLETE")
-
-    def check_interrupt(self) -> bool:
-        """
-        Check if interrupt
+        :param latest_tile:
         :return:
         """
-        temp_number = self.current_player_no
-        for _ in range(4):
-            win_claim, pong_claim, add_kong_claim = (
-                self.players[temp_number].check_claims(self.current_player, self.latest_tile))
+        hidden_vec = []
+        revealed_vec = []
+        discards_vec = []
+        for player in self.players:
+            hidden = player.encode_hidden_hand()
+            revealed = player.encode_revealed_hand()
+            discards = player.encode_discarded_pile()
+            hidden_vec.append(hidden)
+            revealed_vec.append(revealed)
+            discards_vec.append(discards)
 
-            if win_claim:
-                self.game_over = True
+        hidden_vec = np.concatenate(hidden_vec)
+        revealed_vec = np.concatenate(revealed_vec)
+        discards_vec = np.concatenate(discards_vec)
 
-                return True
-            elif add_kong_claim:
-                for _ in range(3):
-                    self.players[temp_number].hidden_hand.remove(self.latest_tile)
+        latest_tile_vec = np.zeros(34, dtype=int)
+        if self.latest_tile:
+            latest_tile_vec[latest_tile.to_index()] = 1
 
-                print("KONG")
-                print(self.players[temp_number])
-                self.players[temp_number].revealed_sets.append([self.latest_tile,
-                                                                self.latest_tile,
-                                                                self.latest_tile,
-                                                                self.latest_tile])
+        # Tiles remaining in the wall
+        tiles_remaining = np.array([len(self.tiles)])
 
-                print(self.players[temp_number].player_id)
-                self.players[temp_number].discard_tile()
-                self.current_player.discard_tile()
-                self.next_turn(temp_number)
-                return True
-            elif pong_claim:
-                print("PONG")
-                for _ in range(2):
-                    self.players[temp_number].hidden_hand.remove(self.latest_tile)
-                self.players[temp_number].revealed_sets.append([self.latest_tile,
-                                                                self.latest_tile,
-                                                                self.latest_tile])
+        current_turn = np.zeros(4, dtype=int)
+        current_turn[self.current_player_no] = 1
 
-                print(self.players[temp_number].player_id)
-                self.players[temp_number].discard_tile()
-                self.next_turn(temp_number)
-                return True
-            temp_number = (temp_number + 1) % 4
-        return False
+        state = np.concatenate([
+            hidden_vec,
+            revealed_vec,
+            discards_vec,
+            latest_tile_vec,
+            tiles_remaining,
+            current_turn
+        ])
 
-    def play_round(self):
-        """
-        Play one round of a MahjongGame to the end until a draw or win
-        """
-        self.game_over = False
-        while not self.game_over and len(self.tiles) != 0:
-            action_taken = self.check_interrupt()
-            print(action_taken)
-            if not action_taken:
-                sheung = self.current_player.decide_sheung(self.latest_tile)
-                if sheung is not None:
-                    sheung_tiles = [self.current_player.hidden_hand[sheung[0]],
-                                    self.current_player.hidden_hand[sheung[1]]
-                                    ]
-                    bisect.insort(sheung_tiles, self.latest_tile)
-                    self.current_player.revealed_sets.append(sheung_tiles)
-                    self.current_player.hidden_hand.pop(sheung[0])
-                    self.current_player.hidden_hand.pop(sheung[1] - 1)
-                    self.current_player.discard_tile()
-
-                else:
-                    if self.draw_tile(self.current_player) is None:
-                        break
-                    self.current_player.discard_tile()
-
-            self.next_turn()
-
-        if len(self.tiles) == 0:
-            print("==================")
-            print("GAME DRAW")
-            for player in self.players:
-                player.print_hand()
-        else:
-            print("==================")
-            print(" GAME WIN ")
-            for player in self.players:
-                player.print_hand()
-
-    def draw_tile(self, player: Player) -> MahjongTile:
-        """
-        Add a tile to the player's hands and return
-        """
-
-        drawn_tile = self.tiles.pop()
-        while drawn_tile.tiletype == "flower" and len(self.tiles) != 0:
-            player.flowers.append(drawn_tile)
-            drawn_tile = self.tiles.pop()
-            print("REDRAW FLOWER")
-        if player.decide_win(drawn_tile):
-            self.game_over = True
-            print("WINNN")
-            print(player.player_id)
-            return None
-        player.add_tile(drawn_tile)
-        print("Player " + str(player.player_id) + " put the following tile into your hand")
-        print(drawn_tile)
-
-        return drawn_tile
-
-    def discard_tile(self, discarded_tile: MahjongTile):
-        """
-        Add the latest tile to the discarded pile and set the latest discarded tile
-        to this
-        """
-        self.latest_tile = discarded_tile
-        self.discarded_tiles.append(discarded_tile)
-        print("Player discarded")
-        print(discarded_tile)
-
-    def next_turn(self, player_skip: Optional[int] = None):
-        """
-
-        :param player_skip:
-        """
-        if player_skip:
-            self.current_player_no = player_skip
-            self.current_player = self.players[self.current_player_no]
-        self.current_player_no = (self.current_player_no + 1) % 4
-        self.current_player = self.players[self.current_player_no]
+        return state

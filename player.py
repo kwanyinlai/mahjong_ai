@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import bisect
-import math
-import random
 from typing import List, Tuple
+
+import numpy as np
 
 from tile import MahjongTile
 
@@ -26,7 +26,7 @@ class Player:
         self.discard_pile = []
         self.total_score = 0
 
-    def check_claims(self, current_player: Player, latest_tile: MahjongTile = None) -> Tuple[bool, bool, bool]:
+    def check_claims(self, latest_tile: MahjongTile = None, state: np.ndarray = None) -> Tuple[bool, bool, bool]:
         """
         WIN_CLAIM
         PONG
@@ -34,12 +34,12 @@ class Player:
         SHEUNG
         DISCARD
         """
-        if self.decide_win(latest_tile):
+        if self.decide_win(latest_tile, state):
             return True, False, False
         if latest_tile is not None:
-            if self.decide_pong(latest_tile):
+            if self.decide_pong(latest_tile, state):
                 return False, True, False
-            elif self.decide_add_kong(latest_tile):
+            elif self.decide_add_kong(latest_tile, state):
                 return False, False, True
 
         return False, False, False
@@ -78,47 +78,11 @@ class Player:
                     possible_hands.append(potential_hand)
 
             i += 1
-        # print(possible_hands)
-        # if possible_hands:
-        #     for hand in possible_hands:
-        #         print("HAND")
-        #         for set in hand:
-        #             print("SET")
-        #             for tile in set:
-        #                 print(tile)
-        #             print("END SET")
-        #         print("HAND END")
 
         possible_hands = sorted(possible_hands, key=lambda hand: Player.score_hand(hand, self.flowers, "east", 0))
         # TODO: Scoring is not rigorously tested yet but should work
         return possible_hands != []
 
-    def encode_hidden_hand(self) -> np.ndarray:
-        """
-        Encode player's hidden hand
-        """
-        vec = np.zeros(34, dtype=int)
-        for tile in self.hidden_hand:
-            vec[tile.to_index()] += 1
-        return vec
-
-    def encode_revealed_hand(self) -> np.ndarray:
-        """
-        Encode player's revealed hand (completed sets)
-        """
-        vec = np.zeros(34, dtype=int)
-        for tile in [tile for subset in self.revealed_sets for tile in subset]:
-            vec[tile.to_index()] += 1
-        return vec
-
-    def encode_discarded_pile(self):
-        """
-        Encode player's discard pile
-        """
-        vec = np.zeros(34, dtype=int)
-        for tile in self.discard_pile:
-            vec[tile.to_index()] += 1
-        return vec
 
     def check_thirteen_orphans(self, remaining_hand, potential_hand):
         """
@@ -303,7 +267,7 @@ class Player:
 
         return lower_sheung, mid_sheung, high_sheung
 
-    def decide_add_kong(self, latest_tile: MahjongTile) -> bool:
+    def decide_add_kong(self, latest_tile: MahjongTile, state: np.array = None) -> bool:
         """
         Base functions check if a kong is possible. All inheriting functions
         should implement functionality of removing the tiles, and whether to
@@ -319,7 +283,7 @@ class Player:
 
         return True
 
-    def decide_win(self, latest_tile) -> bool:
+    def decide_win(self, latest_tile, state: np.array = None) -> bool:
         """
         Base functions check if a win is can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not
@@ -331,7 +295,7 @@ class Player:
             return False
         return True
 
-    def decide_sheung(self, latest_tile: MahjongTile) -> Tuple[int, int]:
+    def decide_sheung(self, latest_tile: MahjongTile, state: np.array = None) -> Tuple[int, int]:
         """
         Base functions check if a sheung can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not and
@@ -351,7 +315,7 @@ class Player:
 
         return True
 
-    def decide_pong(self, discarded_tile: MahjongTile) -> bool:
+    def decide_pong(self, discarded_tile: MahjongTile, state: np.array = None) -> bool:
         """
         Base functions check if a pong is can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not and executing
@@ -364,7 +328,7 @@ class Player:
 
         return True
 
-    def discard_tile(self) -> MahjongTile:
+    def discard_tile(self, state: np.array = None) -> MahjongTile:
         """
         Discard a tile from hand
         """
@@ -399,3 +363,32 @@ class Player:
             for tile in subset:
                 print(tile)
             print("SET END")
+
+    # RL ENCODING ========================================================================
+
+    def encode_hidden_hand(self) -> np.ndarray:
+        """
+        Encode player's hidden hand
+        """
+        vec = np.zeros(34, dtype=int)
+        for tile in self.hidden_hand:
+            vec[tile.to_index()] += 1
+        return vec
+
+    def encode_revealed_hand(self) -> np.ndarray:
+        """
+        Encode player's revealed hand (completed sets)
+        """
+        vec = np.zeros(34, dtype=int)
+        for tile in [tile for subset in self.revealed_sets for tile in subset]:
+            vec[tile.to_index()] += 1
+        return vec
+
+    def encode_discarded_pile(self):
+        """
+        Encode player's discard pile
+        """
+        vec = np.zeros(34, dtype=int)
+        for tile in self.discard_pile:
+            vec[tile.to_index()] += 1
+        return vec
