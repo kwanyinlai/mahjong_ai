@@ -17,6 +17,7 @@ class Player:
     revealed_sets: List[List[MahjongTile]]
     flowers: List[MahjongTile]
     discard_pile: List[MahjongTile]
+    score: int = 0
 
     def __init__(self, player_id):
         self.player_id = player_id
@@ -144,15 +145,16 @@ class Player:
             return True
 
     @staticmethod
-    def score_hand(potential_hand: List[List[MahjongTile]], flowers, circle_wind, player_number) -> int:
+    def score_hand(potential_hand: List[List[MahjongTile]], flowers: List[MahjongTile],
+                   circle_wind, player_number) -> int:
         """
-        Return a score for this hand
+        Return a score for this hand, doesn't have to be complete (for potential fan)
         """
         fan = 0
         ordered_flower = ['plum', 'orchid', 'chrysanthemum', 'bamboo']
         ordered_season = ['summer', 'spring', 'autumn', 'winter']
         ordered_cardinal = ['east', 'south', 'west', 'north']
-        # check flowers TODO: Figure out later
+
         if len(flowers) == 0:
             fan += 1
         elif ['plum', 'orchid', 'chrysanthemum', 'bamboo'] <= [flower.numchar for flower in flowers]:
@@ -203,7 +205,7 @@ class Player:
                 fan += 3
 
         i = 0
-        # TODO: idk why this is bugged
+
         while i < len(potential_hand) and len(potential_hand[i]) != 2:
             i += 1
         potential_hand.pop(i)  # remove the eye

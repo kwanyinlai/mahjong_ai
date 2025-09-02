@@ -4,7 +4,6 @@ import json
 import math
 import random
 import bisect
-from bisect import insort_left
 from typing import Dict, Union, List, Optional, Tuple
 
 import numpy as np
@@ -25,10 +24,11 @@ class MahjongGame:
     discarded_tiles: List[MahjongTile]
     latest_tile: MahjongTile = None
     game_over: bool
+    winner: Player = None
     log: List[Dict]
 
-    def __init__(self):
-        self.players = [BasicBot(i) for i in range(4)]
+    def __init__(self, players: List[Player]):
+        self.players = players
         self.log = []  # {id, state, broad decision, decision value, reward, next state, game over}
         self.tiles = MahjongGame.initialize_tiles()
         self.setup_game()
@@ -127,8 +127,9 @@ class MahjongGame:
 
             if win_claim:
                 self.game_over = True
+                self.winner = self.players[temp_number]
                 self.log.append({
-                    "player_id": self.current_player_no,
+                    "player_id": self.current_player.player_id,
                     "state": state,
                     "action_type": "win",
                     "is_claim": True,
@@ -147,7 +148,7 @@ class MahjongGame:
                                                                 self.latest_tile])
                 next_state = self.get_state()
                 self.log.append({
-                    "player_id": self.current_player_no,
+                    "player_id": self.current_player.player_id,
                     "state": state,
                     "action_type": "kong",
                     "is_claim": True,
@@ -170,7 +171,7 @@ class MahjongGame:
                 print(self.players[temp_number].player_id)
                 next_state = self.get_state()
                 self.log.append({
-                    "player_id": self.current_player_no,
+                    "player_id": self.current_player.player_id,
                     "state": state,
                     "action_type": "pong",
                     "is_claim": True,
@@ -184,10 +185,12 @@ class MahjongGame:
             temp_number = (temp_number + 1) % 4
         return False
 
-    def play_round(self):
+    def play_round(self) -> Player | None:
         """
-        Play one round of a MahjongGame to the end until a draw or win
+        Play one round of a MahjongGame to the end until a draw or win. Return
+        the winner.
         """
+        winner = None
         self.game_over = False
         while not self.game_over and len(self.tiles) != 0:
             state = self.get_state()
@@ -205,7 +208,7 @@ class MahjongGame:
                     self.current_player.hidden_hand.pop(sheung[1] - 1)
                     next_state = self.get_state()
                     self.log.append({
-                        "player_id": self.current_player_no,
+                        "player_id": self.current_player.player_id,
                         "state": state,
                         "action_type": "sheung",
                         "is_claim": True,
@@ -227,11 +230,13 @@ class MahjongGame:
             print("GAME DRAW")
             for player in self.players:
                 player.print_hand()
+            return None
         else:
             print("==================")
             print(" GAME WIN ")
             for player in self.players:
                 player.print_hand()
+            return self.winner
 
     def draw_tile(self, player: Player) -> MahjongTile:
         """
@@ -245,6 +250,7 @@ class MahjongGame:
             print("REDRAW FLOWER")
         if player.decide_win(drawn_tile):
             self.game_over = True
+            self.winner = player
             print("WINNN")
             print(player.player_id)
             return None
@@ -268,7 +274,7 @@ class MahjongGame:
         player.discard_pile.append(discarded_tile)
         next_state = self.get_state()
         self.log.append({
-            "player_id": self.current_player_no,
+            "player_id": self.current_player.player_id,
             "state": state,
             "action_type": "discard",
             "is_claim": True,
@@ -287,6 +293,81 @@ class MahjongGame:
             self.current_player = self.players[self.current_player_no]
         self.current_player_no = (self.current_player_no + 1) % 4
         self.current_player = self.players[self.current_player_no]
+
+    def convert_score(self, fan: int, discard_player: int, winning_player: int) -> List[int]:
+        """
+        Return a list of ints representing the score gained or lost
+        by the player in the given position. If discard_player is
+        -1 then
+        """
+        match fan:
+            case 0:
+                if discard_player == -1:
+                    return [0, 0, 0, 0]
+                else:
+                    scores = [0, 0, 0, 0]
+                    scores[winning_player] = 4
+                    scores[discard_player] = -4
+                    return scores
+            case 1:
+                if discard_player == -1:
+                    score = [-4, -4, -4, -4]
+                    score[winning_player] = 4*3
+                else:
+                    scores = [0, 0, 0, 0]
+                    scores[winning_player] = 8
+                    scores[discard_player] = -8
+                    return scores
+            case 2:
+                if discard_player == -1:
+                    score = [-8, -8, -8, -8]
+                    score[winning_player] = 8 * 3
+
+                else:
+                    scores = [0, 0, 0, 0]
+                    scores[winning_player] = 16
+                    scores[discard_player] = -16
+                    return scores
+            case 3:
+                if discard_player == -1:
+                    score = [-16, -16, -16, -16]
+                    score[winning_player] = 16 * 3
+                    return score
+                else:
+                    scores = [0, 0, 0, 0]
+                    scores[winning_player] = 32
+                    scores[discard_player] = -32
+                    return scores
+            case 4 | 5 | 6:
+                if discard_player == -1:
+                    score = [32, 32, 32, 32]
+                    score[winning_player] = 32 * 3
+                    return score
+                else:
+                    scores = [0, 0, 0, 0]
+                    scores[winning_player] = 64
+                    scores[discard_player] = -64
+                    return scores
+            case 7 | 8 | 9:
+                if discard_player == -1:
+                    score = [64, 64, 64, 64]
+                    score[winning_player] = 64 * 3
+                    return score
+                else:
+                    scores = [0, 0, 0, 0]
+                    scores[winning_player] = 128
+                    scores[discard_player] = -128
+                    return scores
+            case _:
+                if discard_player == -1:
+                    score = [-128, -128, -128, -128]
+                    score[winning_player] = 128 * 3
+                    return score
+                else:
+                    scores = [0, 0, 0, 0]
+                    scores[winning_player] = 256
+                    scores[discard_player] = -256
+                    return scores
 
     # TESTING METHODS ====================================================================
     # ====================================================================================
@@ -437,9 +518,12 @@ class MahjongGame:
         :param latest_tile:
         :return:
         """
+        # TODO: Important to keep in the same position? Since players are rotating positions
+        # TODO: every game?
         hidden_vec = []
         revealed_vec = []
         discards_vec = []
+        hand_potential = []
         for player in self.players:
             hidden = player.encode_hidden_hand()
             revealed = player.encode_revealed_hand()
@@ -447,6 +531,7 @@ class MahjongGame:
             hidden_vec.append(hidden)
             revealed_vec.append(revealed)
             discards_vec.append(discards)
+            # potential_fan = Player.score_hand(player.hidden_hand + player.revealed_sets, player.flowers)
 
         hidden_vec = np.concatenate(hidden_vec)
         revealed_vec = np.concatenate(revealed_vec)
@@ -462,12 +547,12 @@ class MahjongGame:
         current_turn = np.array([self.current_player_no])
 
         state = np.concatenate([
-            hidden_vec, # 34 * 4
-            revealed_vec, # 34 * 4
-            discards_vec, # 34 * 4
-            latest_tile_vec, # 34 * 1
-            tiles_remaining, # 1
-            current_turn # 1
+            hidden_vec,  # 34 * 4
+            revealed_vec,  # 34 * 4
+            discards_vec,  # 34 * 4
+            latest_tile_vec,  # 34 * 1
+            tiles_remaining,  # 1
+            current_turn  # 1
         ])
 
         return state
@@ -505,11 +590,11 @@ class MahjongGame:
             json.dump(test, f)
 
     @staticmethod
-    def reward_function(winloss: int, fan: int) -> float:
+    def reward_function(winloss: int, score: int) -> float:
         """
 
         :param winloss:
         :param fan:
         :return:
         """
-        return winloss * fan
+        return winloss * score
