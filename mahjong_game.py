@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import math
 import random
 import bisect
 from bisect import insort_left
-from typing import Union, List, Optional, Tuple
+from typing import Dict, Union, List, Optional, Tuple
 
 import numpy as np
 
@@ -24,9 +25,11 @@ class MahjongGame:
     discarded_tiles: List[MahjongTile]
     latest_tile: MahjongTile = None
     game_over: bool
+    log: List[Dict]
 
     def __init__(self):
         self.players = [BasicBot(i) for i in range(4)]
+        self.log = []  # {id, state, broad decision, decision value, reward, next state, game over}
         self.tiles = MahjongGame.initialize_tiles()
         self.setup_game()
         self.discarded_tiles = []
@@ -103,7 +106,7 @@ class MahjongGame:
         self.discarded_tiles = []
 
         if self.discard_tile(self.current_player) is not None:
-            self.game_over = True # todo: why??
+            self.game_over = True  # todo: why??
         for player in self.players:
             player.print_hand()
         print("SETUP COMPLETE")
@@ -118,28 +121,41 @@ class MahjongGame:
         :return:
         """
         temp_number = self.current_player_no
-        state = self.get_state_representation()
         for _ in range(4):
-
             win_claim, pong_claim, add_kong_claim = (
                 self.players[temp_number].check_claims(self.latest_tile, state))
 
             if win_claim:
                 self.game_over = True
-
+                self.log.append({
+                    "player_id": self.current_player_no,
+                    "state": state,
+                    "action_type": "win",
+                    "is_claim": True,
+                    "reward": 0.0,
+                    "next_state": None,
+                    "gameover": True
+                })
                 return True
             elif add_kong_claim:
                 for _ in range(3):
                     self.players[temp_number].hidden_hand.remove(self.latest_tile)
 
-                print("KONG")
-                print(self.players[temp_number])
                 self.players[temp_number].revealed_sets.append([self.latest_tile,
                                                                 self.latest_tile,
                                                                 self.latest_tile,
                                                                 self.latest_tile])
+                next_state = self.get_state()
+                self.log.append({
+                    "player_id": self.current_player_no,
+                    "state": state,
+                    "action_type": "kong",
+                    "is_claim": True,
+                    "reward": 0.0,
+                    "next_state": next_state,
+                    "gameover": False
+                })
 
-                print(self.players[temp_number].player_id)
                 self.discard_tile(self.players[temp_number])
                 self.next_turn(temp_number)
                 return True
@@ -152,6 +168,16 @@ class MahjongGame:
                                                                 self.latest_tile])
 
                 print(self.players[temp_number].player_id)
+                next_state = self.get_state()
+                self.log.append({
+                    "player_id": self.current_player_no,
+                    "state": state,
+                    "action_type": "pong",
+                    "is_claim": True,
+                    "reward": 0.0,
+                    "next_state": next_state,
+                    "gameover": False
+                })
                 self.discard_tile(self.players[temp_number])
                 self.next_turn(temp_number)
                 return True
@@ -164,7 +190,7 @@ class MahjongGame:
         """
         self.game_over = False
         while not self.game_over and len(self.tiles) != 0:
-            state = self.get_state_representation()
+            state = self.get_state()
             action_taken = self.check_interrupt(state)
             print(action_taken)
             if not action_taken:
@@ -177,6 +203,16 @@ class MahjongGame:
                     self.current_player.revealed_sets.append(sheung_tiles)
                     self.current_player.hidden_hand.pop(sheung[0])
                     self.current_player.hidden_hand.pop(sheung[1] - 1)
+                    next_state = self.get_state()
+                    self.log.append({
+                        "player_id": self.current_player_no,
+                        "state": state,
+                        "action_type": "sheung",
+                        "is_claim": True,
+                        "reward": 0.0,
+                        "next_state": next_state,
+                        "gameover": False
+                    })
                     self.discard_tile(self.current_player, state)
 
                 else:
@@ -230,6 +266,16 @@ class MahjongGame:
         print("PLAYER " + str(player.player_id) + " DISCARDED")
         print(discarded_tile)
         player.discard_pile.append(discarded_tile)
+        next_state = self.get_state()
+        self.log.append({
+            "player_id": self.current_player_no,
+            "state": state,
+            "action_type": "discard",
+            "is_claim": True,
+            "reward": 0.0,
+            "next_state": next_state,
+            "gameover": False
+        })
 
     def next_turn(self, player_skip: Optional[int] = None):
         """
@@ -385,7 +431,7 @@ class MahjongGame:
 
         # STATE ===========================================================================
 
-    def get_state(self, latest_tile=None):
+    def get_state(self):
         """
 
         :param latest_tile:
@@ -407,22 +453,63 @@ class MahjongGame:
         discards_vec = np.concatenate(discards_vec)
 
         latest_tile_vec = np.zeros(34, dtype=int)
-        if self.latest_tile:
-            latest_tile_vec[latest_tile.to_index()] = 1
+        if self.latest_tile is not None:
+            latest_tile_vec[self.latest_tile.to_index()] = 1
 
         # Tiles remaining in the wall
         tiles_remaining = np.array([len(self.tiles)])
 
-        current_turn = np.zeros(4, dtype=int)
-        current_turn[self.current_player_no] = 1
+        current_turn = np.array([self.current_player_no])
 
         state = np.concatenate([
-            hidden_vec,
-            revealed_vec,
-            discards_vec,
-            latest_tile_vec,
-            tiles_remaining,
-            current_turn
+            hidden_vec, # 34 * 4
+            revealed_vec, # 34 * 4
+            discards_vec, # 34 * 4
+            latest_tile_vec, # 34 * 1
+            tiles_remaining, # 1
+            current_turn # 1
         ])
 
         return state
+
+    def finish_episode(self, player_id: int, winloss: int, fan: int):
+        """
+        win -> winloss = 1
+        loss -> winloss = -1
+        draw -> winloss = 0
+        """
+        reward = MahjongGame.reward_function(winloss, fan)
+        for step in self.log:
+            if step["player_id"] == player_id:
+                step["reward"] = reward
+                step["gameover"] = True
+
+    def log_to_json(self, filepath):
+        """
+        Conver the log to a jSOn file
+        :return:
+        """
+        test = []
+        for action in self.log:
+            test.append({
+                "player_id": action.get("player_id"),
+                "state": action["state"].tolist(),
+                "action_type": action["action_type"],
+                "action": action["action"],
+                "reward": action["reward"],
+                "next_state": action["next_state"].tolist(),
+                "done": action["gameover"]
+            })
+
+        with open(filepath, "w") as f:
+            json.dump(test, f)
+
+    @staticmethod
+    def reward_function(winloss: int, fan: int) -> float:
+        """
+
+        :param winloss:
+        :param fan:
+        :return:
+        """
+        return winloss * fan

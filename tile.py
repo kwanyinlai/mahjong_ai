@@ -84,3 +84,28 @@ class MahjongTile:
         elif self.subtype == "dragon":
             dragon_order = {"red": 31, "green": 32, "white": 33}
             return dragon_order[self.numchar]
+
+    @staticmethod
+    def index_to_tile(index: int) -> MahjongTile:
+        if 0 <= index < 9:
+            return MahjongTile(tiletype="suit", subtype="circle", numchar=index+1)
+        elif 9 <= index < 18:
+            return MahjongTile(tiletype="suit", subtype="bamboo", numchar=index+1-9)
+        elif 18 <= index < 27:
+            return MahjongTile(tiletypetype="suit", subtype="number", numchar=index+1-18)
+        elif index == 27:
+            return MahjongTile(tiletype="honour", subtype="wind", numchar="east")
+        elif index == 28:
+            return MahjongTile(tiletype="honour", subtype="wind", numchar="south")
+        elif index == 29:
+            return MahjongTile(tiletype="honour", subtype="wind", numchar="west")
+        elif index == 30:
+            return MahjongTile(tiletype="honour", subtype="wind", numchar="north")
+        elif index == 31:
+            return MahjongTile(tiletype="honour", subtype="dragon", numchar="red")
+        elif index == 32:
+            return MahjongTile(tiletype="honour", subtype="dragon", numchar="green")
+        elif index == 33:
+            return MahjongTile(tiletype="honour", subtype="dragon", numchar="white")
+        else:
+            raise ValueError
