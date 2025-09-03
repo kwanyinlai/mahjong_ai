@@ -90,7 +90,7 @@ class Player:
             i += 1
 
         possible_hands = sorted(possible_hands, key=lambda hand: Player.score_hand(hand, self.flowers, circle_wind, 0))
-        # TODO: Scoring is not rigorously tested yet but should work
+
         return possible_hands != []
 
 

@@ -112,7 +112,7 @@ class BasicBot(Player):
             if tile_needed < lowest_tile_needed:
                 discarded_tile = tile
                 lowest_tile_needed = tile_needed
-
+        # TODO: SOMEHOW WE ARE RETURNING NONE BECAUSE THE HAND IS EMPTY, WHY IS HAND EMPTY
         return discarded_tile
 
     def calculate_tiles_required(self, hand, removed_tile) -> int:

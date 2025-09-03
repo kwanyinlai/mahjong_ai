@@ -37,7 +37,6 @@ class MahjongGame:
         self.game_over = False
         self.circle_wind = circle_wind
 
-
     @staticmethod
     def initialize_tiles() -> List[MahjongTile]:
         """
@@ -159,14 +158,24 @@ class MahjongGame:
                     "next_state": next_state,
                     "gameover": False
                 })
-                print("KONG")
-                print(self.latest_tile)
+                self.draw_tile(self.players[temp_number])
                 self.discard_tile(self.players[temp_number])
+
+                next_next_state = self.get_state()
+
+                self.log.append({
+                    "player_id": self.current_player.player_id,
+                    "state": next_state,
+                    "action_type": "discard",
+                    "is_claim": False,
+                    "reward": 0.0,
+                    "next_state": next_next_state,
+                    "gameover": False
+                })
                 self.next_turn(temp_number)
+
                 return True
             elif pong_claim:
-                print("PONG")
-                print(self.latest_tile)
                 for _ in range(2):
                     self.players[temp_number].hidden_hand.remove(self.latest_tile)
                 self.players[temp_number].revealed_sets.append([self.latest_tile,
@@ -195,17 +204,15 @@ class MahjongGame:
         Play one round of a MahjongGame to the end until a draw or win. Return
         the winner.
         """
-        winner = None
+        self.winner = None
         self.game_over = False
         while not self.game_over and len(self.tiles) != 0:
             state = self.get_state()
             action_taken = self.check_interrupt(state)
             # print(action_taken)
-            if not action_taken:
+            if not action_taken:  # kong takes latest tile
                 sheung = self.current_player.decide_sheung(self.latest_tile, state)
                 if sheung is not None:
-                    print("SHEUNG")
-                    print(self.latest_tile)
                     sheung_tiles = [self.current_player.hidden_hand[sheung[0]],
                                     self.current_player.hidden_hand[sheung[1]]
                                     ]
@@ -224,14 +231,31 @@ class MahjongGame:
                         "gameover": False
                     })
                     self.discard_tile(self.current_player, state)
-
+                    next_next_state = self.get_state()
+                    self.log.append({
+                        "player_id": self.current_player.player_id,
+                        "state": next_state,
+                        "action_type": "discard",
+                        "is_claim": False,
+                        "reward": 0.0,
+                        "next_state": next_next_state,
+                        "gameover": False
+                    })
                 else:
                     if self.draw_tile(self.current_player) is None:
                         break
                     self.discard_tile(self.current_player, state)
-
+                    next_state = self.get_state()
+                    self.log.append({
+                        "player_id": self.current_player.player_id,
+                        "state": state,
+                        "action_type": "discard",
+                        "is_claim": False,
+                        "reward": 0.0,
+                        "next_state": next_state,
+                        "gameover": False
+                    })
             self.next_turn()
-
 
         if len(self.tiles) == 0:
             print("==================")
@@ -241,7 +265,7 @@ class MahjongGame:
             return None
         else:
             print("==================")
-            print(" GAME WIN ")
+            print("GAME WIN ")
             for player in self.players:
                 player.print_hand()
             return self.winner
@@ -250,21 +274,32 @@ class MahjongGame:
         """
         Add a tile to the player's hands and return
         """
-
+        # TODO: Check kong after draw, including with pong
         drawn_tile = self.tiles.pop()
         while drawn_tile.tiletype == "flower" and len(self.tiles) != 0:
             player.flowers.append(drawn_tile)
             drawn_tile = self.tiles.pop()
             # print("REDRAW FLOWER")
+
         if player.decide_win(drawn_tile, self.circle_wind, self.current_player_no):
             self.game_over = True
             self.winner = player
             print("WINNN")
             print(player.player_id)
+            state = self.get_state()
+            self.log.append({
+                "player_id": self.current_player.player_id,
+                "state": state,
+                "action_type": "win",
+                "is_claim": True,
+                "reward": 0.0,
+                "next_state": None,
+                "gameover": True
+            })
             return None
         player.add_tile(drawn_tile)
         # print("Player " + str(player.player_id) + " put the following tile into your hand")
-        print(drawn_tile)
+        # print(drawn_tile)
 
         return drawn_tile
 
@@ -275,14 +310,12 @@ class MahjongGame:
         """
 
         discarded_tile = player.discard_tile(state)
-        print("HI")
-        print(discarded_tile)
         self.latest_tile = discarded_tile
         self.discarded_tiles.append(discarded_tile)
 
-        player.hidden_hand.remove(discarded_tile)  # TODO: ValueError: list.remove(x): x not in list
-        print("PLAYER " + str(player.player_id) + " DISCARDED")
-        print(discarded_tile)
+        player.hidden_hand.remove(discarded_tile)
+        # print("PLAYER " + str(player.player_id) + " DISCARDED")
+        # print(discarded_tile)
         player.discard_pile.append(discarded_tile)
         next_state = self.get_state()
         self.log.append({
@@ -324,7 +357,7 @@ class MahjongGame:
             case 1:
                 if discard_player == -1:
                     score = [-4, -4, -4, -4]
-                    score[winning_player] = 4*3
+                    score[winning_player] = 4 * 3
                 else:
                     scores = [0, 0, 0, 0]
                     scores[winning_player] = 8
