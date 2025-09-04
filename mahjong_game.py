@@ -301,13 +301,15 @@ class MahjongGame:
         """
 
         discarded_tile = player.discard_tile(state)
-        self.latest_tile = discarded_tile
+        self.latest_tile = discarded_tile # TODO WHAT IS THIS
         self.discarded_tiles.append(discarded_tile)
-
+        print("PLAYER " + str(player.player_id) + " DISCARDED")
+        print(discarded_tile)
+        player.print_hand()
         player.hidden_hand.remove(discarded_tile)  # TODO: occasional bug here but so infrequent
         # TODO: that it's hard to detec tht ereason??
-        # print("PLAYER " + str(player.player_id) + " DISCARDED")
-        # print(discarded_tile)
+        # TODO: Something to do with discarded tile being a None
+
         player.discard_pile.append(discarded_tile)
         self.log.append({
             "player_id": self.current_player.player_id,

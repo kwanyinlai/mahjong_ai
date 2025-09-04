@@ -113,6 +113,9 @@ class BasicBot(Player):
                 discarded_tile = tile
                 lowest_tile_needed = tile_needed
         # TODO: SOMEHOW WE ARE RETURNING NONE BECAUSE THE HAND IS EMPTY, WHY IS HAND EMPTY
+        if discarded_tile is None:
+            self.print_hand()
+            raise ValueError(f"Length of hidden hand is {len(self.hidden_hand)}")
         return discarded_tile
 
     def calculate_tiles_required(self, hand, removed_tile) -> int:
