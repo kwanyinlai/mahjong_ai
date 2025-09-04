@@ -11,7 +11,7 @@ class MahjongTable:
     """
     Represents a series of games
     """
-    circle_wind: Dict[str] = {1: "east", 2: "south", 3: "west", 4: "north"}
+    circle_wind: Dict[int, str] = {1: "east", 2: "south", 3: "west", 4: "north"}
     starting_player: Player
     players: List[Player]
 
@@ -29,10 +29,11 @@ class MahjongTable:
             print("ROUND " + str(round_no))
             game = MahjongGame(self.players, self.circle_wind[round_no])
             winner = game.play_round()
-            if winner is not self.starting_player:
+            for player in self.players:
+                player.soft_reset()
+            if winner is not self.starting_player and winner is not None:
                 player_start += 1
                 for player in self.players:
-                    player.soft_reset()
                     player.player_order = (player.player_order + 1) % 4
                 if player_start == 4:
                     player_start = 0

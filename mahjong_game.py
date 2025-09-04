@@ -240,6 +240,15 @@ class MahjongGame:
             print("GAME WIN ")
             for player in self.players:
                 player.print_hand()
+            # TODO: self draw and what not
+            if self.current_player is self.winner:
+                scores = self.convert_score(self.winner.highest_fan, -1, self.winner.player_id)
+                print("SELF DRAW")
+            else:
+                scores = self.convert_score(self.winner.highest_fan, self.current_player_no, self.winner.player_id)
+                print("DISCARD WIN")
+            for i in range(4):
+                self.players[i].score += scores[i]
             return self.winner
 
     def draw_tile(self, player: Player) -> MahjongTile:
@@ -295,7 +304,8 @@ class MahjongGame:
         self.latest_tile = discarded_tile
         self.discarded_tiles.append(discarded_tile)
 
-        player.hidden_hand.remove(discarded_tile)
+        player.hidden_hand.remove(discarded_tile)  # TODO: occasional bug here but so infrequent
+        # TODO: that it's hard to detec tht ereason??
         # print("PLAYER " + str(player.player_id) + " DISCARDED")
         # print(discarded_tile)
         player.discard_pile.append(discarded_tile)
@@ -338,6 +348,7 @@ class MahjongGame:
                 if discard_player == -1:
                     score = [-4, -4, -4, -4]
                     score[winning_player] = 4 * 3
+                    return score
                 else:
                     scores = [0, 0, 0, 0]
                     scores[winning_player] = 8
@@ -347,7 +358,7 @@ class MahjongGame:
                 if discard_player == -1:
                     score = [-8, -8, -8, -8]
                     score[winning_player] = 8 * 3
-
+                    return score
                 else:
                     scores = [0, 0, 0, 0]
                     scores[winning_player] = 16
@@ -365,7 +376,7 @@ class MahjongGame:
                     return scores
             case 4 | 5 | 6:
                 if discard_player == -1:
-                    score = [32, 32, 32, 32]
+                    score = [-32, -32, -32, -32]
                     score[winning_player] = 32 * 3
                     return score
                 else:
@@ -375,7 +386,7 @@ class MahjongGame:
                     return scores
             case 7 | 8 | 9:
                 if discard_player == -1:
-                    score = [64, 64, 64, 64]
+                    score = [-64, -64, -64, -64]
                     score[winning_player] = 64 * 3
                     return score
                 else:
@@ -533,7 +544,7 @@ class MahjongGame:
                                tile9, tile9]
 
         player1.hidden_hand.sort()
-        print(Player.score_hand(player1.hidden_hand, player1.flowers, "east", 0))
+        print(Player.score_hand(player1.revealed_sets, player1.flowers, "east", 0))
 
         # STATE ===========================================================================
 

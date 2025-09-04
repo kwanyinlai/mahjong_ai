@@ -19,6 +19,7 @@ class Player:
     discard_pile: List[MahjongTile]
     score: int = 0
     player_order: int
+    highest_fan: int = 0
 
     def __init__(self, player_id):
         self.player_id = player_id
@@ -34,6 +35,7 @@ class Player:
         self.revealed_sets = []
         self.flowers = []
         self.discard_pile = []
+        self.highest_scoring_hand = 0
 
     def check_claims(self, circle_wind, player_number, latest_tile: MahjongTile = None,
                      state: np.ndarray = None) -> Tuple[bool, bool, bool]:
@@ -88,10 +90,16 @@ class Player:
                     possible_hands.append(potential_hand)
 
             i += 1
-        # TODO: player number implement
-        possible_hands = sorted(possible_hands, key=lambda hand: Player.score_hand(hand, self.flowers, circle_wind, 0))
 
-        return possible_hands != []
+        possible_hands = sorted(possible_hands,
+                                key=lambda hand: Player.score_hand(hand, self.flowers, circle_wind, self.player_order),
+                                reverse=True)
+        if possible_hands:
+            highest_fan = Player.score_hand(possible_hands[0], self.flowers, circle_wind, self.player_order)
+            if highest_fan >= 3:
+                self.highest_fan = 3 # TODO: san fan hei
+                return True
+        return False
 
     def check_thirteen_orphans(self, remaining_hand, potential_hand):
         """
@@ -154,7 +162,7 @@ class Player:
 
     @staticmethod
     def potential_fan(potential_hand: List[List[MahjongTile]], flowers: List[MahjongTile],
-                   circle_wind, player_number) -> int | float:
+                      circle_wind, player_number) -> int | float:
         """
         Return a score for this hand, doesn't have to be complete (for potential fan)
         """
@@ -226,7 +234,7 @@ class Player:
                  tile[0].numchar == tile[1].numchar + 1 for tile in potential_hand):  #ping wu
             fan += 1
 
-        return fan * len(potential_hand) / 4 # normalised fan based on completion
+        return fan * len(potential_hand) / 4  # normalised fan based on completion
 
     @staticmethod
     def score_hand(potential_hand: List[List[MahjongTile]], flowers: List[MahjongTile],
@@ -240,10 +248,6 @@ class Player:
         ordered_flower = ['plum', 'orchid', 'chrysanthemum', 'bamboo']
         ordered_season = ['summer', 'spring', 'autumn', 'winter']
         ordered_cardinal = ['east', 'south', 'west', 'north']
-        # TODO: Need a potential faan function which finds completed sets
-        # TODO: Maybe use my check winning hands function but don't discard
-        # TODO: incomplete hands and just toss away the incomplete part and return
-        # TODO: the fan score of the remaining hand and the distance from completion.
         if len(flowers) == 0:
             fan += 1
         elif ['plum', 'orchid', 'chrysanthemum', 'bamboo'] <= [flower.numchar for flower in flowers]:
