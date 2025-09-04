@@ -33,6 +33,7 @@ class MahjongTable:
                 player_start += 1
                 for player in self.players:
                     player.soft_reset()
+                    player.player_order = (player.player_order + 1) % 4
                 if player_start == 4:
                     player_start = 0
                     round_no += 1

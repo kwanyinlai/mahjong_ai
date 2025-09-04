@@ -18,6 +18,7 @@ class Player:
     flowers: List[MahjongTile]
     discard_pile: List[MahjongTile]
     score: int = 0
+    player_order: int
 
     def __init__(self, player_id):
         self.player_id = player_id
@@ -26,14 +27,13 @@ class Player:
         self.flowers = []
         self.discard_pile = []
         self.total_score = 0
-
+        self.player_order = player_id
 
     def soft_reset(self):
         self.hidden_hand = []
         self.revealed_sets = []
         self.flowers = []
         self.discard_pile = []
-
 
     def check_claims(self, circle_wind, player_number, latest_tile: MahjongTile = None,
                      state: np.ndarray = None) -> Tuple[bool, bool, bool]:
@@ -88,11 +88,10 @@ class Player:
                     possible_hands.append(potential_hand)
 
             i += 1
-
+        # TODO: player number implement
         possible_hands = sorted(possible_hands, key=lambda hand: Player.score_hand(hand, self.flowers, circle_wind, 0))
 
         return possible_hands != []
-
 
     def check_thirteen_orphans(self, remaining_hand, potential_hand):
         """
@@ -154,11 +153,13 @@ class Player:
             return True
 
     @staticmethod
-    def score_hand(potential_hand: List[List[MahjongTile]], flowers: List[MahjongTile],
-                   circle_wind, player_number) -> int:
+    def potential_fan(potential_hand: List[List[MahjongTile]], flowers: List[MahjongTile],
+                   circle_wind, player_number) -> int | float:
         """
         Return a score for this hand, doesn't have to be complete (for potential fan)
         """
+        if len(potential_hand) == 0:
+            return 0
         fan = 0
         ordered_flower = ['plum', 'orchid', 'chrysanthemum', 'bamboo']
         ordered_season = ['summer', 'spring', 'autumn', 'winter']
@@ -204,9 +205,86 @@ class Player:
         elif len(wind_sets) == 4:
             fan += 6
         else:
-            if any(full_set == circle_wind and len(full_set) == 3 for full_set in wind_sets):
+            if any(full_set[0].numchar == circle_wind and len(full_set) == 3 for full_set in wind_sets):
                 fan += 1
-            elif any(full_set == ordered_cardinal[player_number] and len(full_set) == 3 for full_set in wind_sets):
+            if any(full_set[0].numchar == ordered_cardinal[player_number] and
+                   len(full_set) == 3 for full_set in wind_sets):
+                fan += 1
+
+        if all(potential_hand[i][0].subtype == potential_hand[i + 1][0].subtype for i in
+               range(0, len(potential_hand) - 1)):
+            if len(honour_sets) == 0 and len(wind_sets) == 0:
+                fan += 5
+            else:
+                fan += 3
+
+        # dui dui wu
+        if all(tile[0] == tile[1] for tile in potential_hand):
+            fan += 3
+        # assuming possible hands is structured correctly and can only contain a straight or a triplet
+        elif all(tile[0].tiletype == "suit" and tile[1].tiletype == "suit" and
+                 tile[0].numchar == tile[1].numchar + 1 for tile in potential_hand):  #ping wu
+            fan += 1
+
+        return fan * len(potential_hand) / 4 # normalised fan based on completion
+
+    @staticmethod
+    def score_hand(potential_hand: List[List[MahjongTile]], flowers: List[MahjongTile],
+                   circle_wind, player_number) -> int:
+        """
+        Return a score for this hand, doesn't have to be complete (for potential fan)
+        """
+        if len(potential_hand) == 0:
+            return 0
+        fan = 0
+        ordered_flower = ['plum', 'orchid', 'chrysanthemum', 'bamboo']
+        ordered_season = ['summer', 'spring', 'autumn', 'winter']
+        ordered_cardinal = ['east', 'south', 'west', 'north']
+        # TODO: Need a potential faan function which finds completed sets
+        # TODO: Maybe use my check winning hands function but don't discard
+        # TODO: incomplete hands and just toss away the incomplete part and return
+        # TODO: the fan score of the remaining hand and the distance from completion.
+        if len(flowers) == 0:
+            fan += 1
+        elif ['plum', 'orchid', 'chrysanthemum', 'bamboo'] <= [flower.numchar for flower in flowers]:
+            fan += 2
+        elif ['summer', 'spring', 'autumn', 'winter'] <= [flower.numchar for flower in flowers]:
+            fan += 2
+        else:
+            if any(flower.numchar == ordered_flower[player_number] for flower in flowers):
+                fan += 1
+            if any(season.numchar == ordered_season[player_number] for season in flowers):
+                fan += 1
+
+        honour_sets = []
+        wind_sets = []
+
+        i = 0
+        while i < len(potential_hand):
+            if potential_hand[i][0].subtype == 'honour':
+                honour_sets.append(potential_hand.pop(i))
+            elif potential_hand[i][0].subtype == 'wind':
+                wind_sets.append(potential_hand.pop(i))
+            i += 1
+
+        if len(honour_sets) == 3 and all(len(full_set) == 3 for full_set in honour_sets):
+            fan += 8
+            return fan
+        elif len(honour_sets) == 3:
+            fan += 5
+        else:
+            fan += len([full_set for full_set in honour_sets if len(full_set) > 2])
+
+        if len(wind_sets) == 4 and all(len(full_set) == 3 for full_set in wind_sets):
+            fan += 13
+            return fan
+        elif len(wind_sets) == 4:
+            fan += 6
+        else:
+            if any(full_set[0].numchar == circle_wind and len(full_set) == 3 for full_set in wind_sets):
+                fan += 1
+            if any(full_set[0].numchar == ordered_cardinal[player_number] and
+                   len(full_set) == 3 for full_set in wind_sets):
                 fan += 1
 
         if all(potential_hand[i][0].subtype == potential_hand[i + 1][0].subtype for i in

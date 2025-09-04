@@ -86,7 +86,7 @@ class MahjongGame:
             current_player_number += 1
             current_player_number %= 4
 
-        for player_redraw in self.players:  # TODO: Fix this to go in right order, while loop ntof or loop
+        for player_redraw in self.players:
             last_tile = player_redraw.hidden_hand[len(player_redraw.hidden_hand) - 1]
             while player_redraw.hidden_hand[len(player_redraw.hidden_hand) - 1].tiletype == 'flower':
                 last_tile = player_redraw.hidden_hand.pop()
@@ -117,9 +117,10 @@ class MahjongGame:
     # ====================================================================================
     # ====================================================================================
 
-    def check_interrupt(self, state: np.ndarray = None) -> bool:
+    def check_interrupt(self, state: np.ndarray = None) -> Tuple[bool, bool]:
         """
-        Check if interrupt
+        Check if should check sheung, and if to interrupt turn flow (bool 1 and
+        2 respectively)
         :return:
         """
         temp_number = self.current_player_no
@@ -136,10 +137,9 @@ class MahjongGame:
                     "action_type": "win",
                     "is_claim": True,
                     "reward": 0.0,
-                    "next_state": None,
                     "gameover": True
                 })
-                return True
+                return False, True
             elif add_kong_claim:
                 for _ in range(3):
                     self.players[temp_number].hidden_hand.remove(self.latest_tile)
@@ -148,33 +148,19 @@ class MahjongGame:
                                                                 self.latest_tile,
                                                                 self.latest_tile,
                                                                 self.latest_tile])
-                next_state = self.get_state()
+
                 self.log.append({
                     "player_id": self.current_player.player_id,
                     "state": state,
                     "action_type": "kong",
                     "is_claim": True,
                     "reward": 0.0,
-                    "next_state": next_state,
                     "gameover": False
                 })
-                self.draw_tile(self.players[temp_number])
-                self.discard_tile(self.players[temp_number])
 
-                next_next_state = self.get_state()
+                self.next_turn((temp_number - 1) % 4)
 
-                self.log.append({
-                    "player_id": self.current_player.player_id,
-                    "state": next_state,
-                    "action_type": "discard",
-                    "is_claim": False,
-                    "reward": 0.0,
-                    "next_state": next_next_state,
-                    "gameover": False
-                })
-                self.next_turn(temp_number)
-
-                return True
+                return False, False
             elif pong_claim:
                 for _ in range(2):
                     self.players[temp_number].hidden_hand.remove(self.latest_tile)
@@ -183,21 +169,21 @@ class MahjongGame:
                                                                 self.latest_tile])
 
                 # print(self.players[temp_number].player_id)
-                next_state = self.get_state()
                 self.log.append({
                     "player_id": self.current_player.player_id,
                     "state": state,
                     "action_type": "pong",
                     "is_claim": True,
                     "reward": 0.0,
-                    "next_state": next_state,
                     "gameover": False
                 })
                 self.discard_tile(self.players[temp_number])
+
                 self.next_turn(temp_number)
-                return True
+
+                return True, True
             temp_number = (temp_number + 1) % 4
-        return False
+        return True, False
 
     def play_round(self) -> Player | None:
         """
@@ -208,9 +194,9 @@ class MahjongGame:
         self.game_over = False
         while not self.game_over and len(self.tiles) != 0:
             state = self.get_state()
-            action_taken = self.check_interrupt(state)
+            check_sheung, action_taken = self.check_interrupt(state)
             # print(action_taken)
-            if not action_taken:  # kong takes latest tile
+            if not action_taken and check_sheung:  # kong takes latest tile
                 sheung = self.current_player.decide_sheung(self.latest_tile, state)
                 if sheung is not None:
                     sheung_tiles = [self.current_player.hidden_hand[sheung[0]],
@@ -220,39 +206,25 @@ class MahjongGame:
                     self.current_player.revealed_sets.append(sheung_tiles)
                     self.current_player.hidden_hand.pop(sheung[0])
                     self.current_player.hidden_hand.pop(sheung[1] - 1)
-                    next_state = self.get_state()
                     self.log.append({
                         "player_id": self.current_player.player_id,
                         "state": state,
                         "action_type": "sheung",
                         "is_claim": True,
                         "reward": 0.0,
-                        "next_state": next_state,
                         "gameover": False
                     })
                     self.discard_tile(self.current_player, state)
-                    next_next_state = self.get_state()
-                    self.log.append({
-                        "player_id": self.current_player.player_id,
-                        "state": next_state,
-                        "action_type": "discard",
-                        "is_claim": False,
-                        "reward": 0.0,
-                        "next_state": next_next_state,
-                        "gameover": False
-                    })
                 else:
                     if self.draw_tile(self.current_player) is None:
                         break
                     self.discard_tile(self.current_player, state)
-                    next_state = self.get_state()
                     self.log.append({
                         "player_id": self.current_player.player_id,
                         "state": state,
                         "action_type": "discard",
                         "is_claim": False,
                         "reward": 0.0,
-                        "next_state": next_state,
                         "gameover": False
                     })
             self.next_turn()
@@ -274,14 +246,13 @@ class MahjongGame:
         """
         Add a tile to the player's hands and return
         """
-        # TODO: Check kong after draw, including with pong
         drawn_tile = self.tiles.pop()
+        state = self.get_state()
         while drawn_tile.tiletype == "flower" and len(self.tiles) != 0:
             player.flowers.append(drawn_tile)
             drawn_tile = self.tiles.pop()
             # print("REDRAW FLOWER")
-
-        if player.decide_win(drawn_tile, self.circle_wind, self.current_player_no):
+        if player.decide_win(drawn_tile, self.circle_wind, self.current_player_no, state):
             self.game_over = True
             self.winner = player
             print("WINNN")
@@ -293,14 +264,25 @@ class MahjongGame:
                 "action_type": "win",
                 "is_claim": True,
                 "reward": 0.0,
-                "next_state": None,
                 "gameover": True
             })
             return None
+        latest_tile, self.latest_tile = self.latest_tile, drawn_tile
+        state = self.get_state()
+        while player.decide_add_kong(drawn_tile, state) and len(self.tiles) > 0:
+            state = self.get_state()
+            for _ in range(3):
+                self.players[self.current_player_no].hidden_hand.remove(drawn_tile)
+
+            self.players[self.current_player_no].revealed_sets.append([drawn_tile,
+                                                                       drawn_tile,
+                                                                       drawn_tile,
+                                                                       drawn_tile])
+            self.draw_tile(player)
+        self.latest_tile = latest_tile
         player.add_tile(drawn_tile)
         # print("Player " + str(player.player_id) + " put the following tile into your hand")
         # print(drawn_tile)
-
         return drawn_tile
 
     def discard_tile(self, player: Player, state: np.ndarray = None):
@@ -317,14 +299,12 @@ class MahjongGame:
         # print("PLAYER " + str(player.player_id) + " DISCARDED")
         # print(discarded_tile)
         player.discard_pile.append(discarded_tile)
-        next_state = self.get_state()
         self.log.append({
             "player_id": self.current_player.player_id,
             "state": state,
             "action_type": "discard",
             "is_claim": True,
             "reward": 0.0,
-            "next_state": next_state,
             "gameover": False
         })
 
@@ -563,8 +543,8 @@ class MahjongGame:
         :param latest_tile:
         :return:
         """
-        # TODO: Important to keep in the same position? Since players are rotating positions
-        # TODO: every game?
+        # TODO: Restructure this to put all of one player's information together
+        # TODO: probably not important to keep in same position if has current player's turn
         hidden_vec = []
         revealed_vec = []
         discards_vec = []
@@ -576,7 +556,10 @@ class MahjongGame:
             hidden_vec.append(hidden)
             revealed_vec.append(revealed)
             discards_vec.append(discards)
-            # potential_fan = Player.score_hand(player.hidden_hand + player.revealed_sets, player.flowers)
+            potential_fan = Player.potential_fan(player.revealed_sets,
+                                                 player.flowers,
+                                                 self.circle_wind,
+                                                 player.player_order)
 
         hidden_vec = np.concatenate(hidden_vec)
         revealed_vec = np.concatenate(revealed_vec)
@@ -627,7 +610,6 @@ class MahjongGame:
                 "action_type": action["action_type"],
                 "action": action["action"],
                 "reward": action["reward"],
-                "next_state": action["next_state"].tolist(),
                 "done": action["gameover"]
             })
 
