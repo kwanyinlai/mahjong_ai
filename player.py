@@ -46,6 +46,8 @@ class Player:
         SHEUNG
         DISCARD
         """
+        if not latest_tile:
+            return False, False, False
         if self.decide_win(latest_tile, circle_wind, player_number, state):
             return True, False, False
         if latest_tile is not None:
@@ -384,7 +386,6 @@ class Player:
         Base functions check if a win is can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not
         """
-
         self.add_tile(latest_tile)
         if not self.check_winning_hand(circle_wind, player_number):
             self.hidden_hand.remove(latest_tile)
@@ -435,6 +436,7 @@ class Player:
         Add the tile to the hand in a sorted order
         """
         bisect.insort(self.hidden_hand, drawn_tile)
+        print(drawn_tile)
         # if len(self.hidden_hand) + 3*len(self.revealed_sets) != 14:
         #     print("ERROR FOR PLAYER" + str(self.player_id))
         #     self.print_hand()

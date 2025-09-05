@@ -25,6 +25,8 @@ class MahjongTable:
         """
         round_no = 1
         player_start = 0
+        for i in range(4):
+            self.players[i].player_order = i
         while round_no < 5:
             print("ROUND " + str(round_no))
             game = MahjongGame(self.players, self.circle_wind[round_no])
@@ -37,6 +39,6 @@ class MahjongTable:
                     player.player_order = (player.player_order + 1) % 4
                 if player_start == 4:
                     player_start = 0
-                    round_no += 1
+                    round_no += 1 # TODO: Set up order properly
 
 # TODO: Support multithreading

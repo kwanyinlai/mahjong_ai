@@ -29,13 +29,21 @@ class MahjongGame:
     circle_wind: str
 
     def __init__(self, players: List[Player], circle_wind):
-        self.players = players
+        ordered_players = []
+        i = 0
+        while i < 4:
+            for player in players:
+                if player.player_order == i:
+                    ordered_players.append(player)
+                    break
+            i += 1
+        self.players = ordered_players
         self.log = []  # {id, state, broad decision, decision value, reward, next state, game over}
-        self.tiles = MahjongGame.initialize_tiles()
-        self.setup_game()
         self.discarded_tiles = []
         self.game_over = False
         self.circle_wind = circle_wind
+        self.tiles = MahjongGame.initialize_tiles()
+        self.setup_game()
 
     @staticmethod
     def initialize_tiles() -> List[MahjongTile]:
@@ -63,38 +71,32 @@ class MahjongGame:
 
         return tiles
 
-    def initialise_players(self):
-        """
-        Add all players into the game
-        """
-        player1 = RandomBot(1)
-        player2 = RandomBot(2)
-        player3 = RandomBot(3)
-        player4 = RandomBot(4)
-        self.players = [player1, player2, player3, player4]
-
-    def initialise_player_hands(self, starting_number: int):
+    def initialise_player_hands(self):
         """
         Starting number is the index of the player we start with
         Give 13 tiles to each player, then replace with 13 tiles, and then give
         a 14th tile to the first person to play.
         """
         # clear player hands
-        current_player_number = starting_number
-        while len(self.players[starting_number].hidden_hand) < 14:
+        current_player_number = 0
+        while len(self.players[0].hidden_hand) < 14:
             self.players[current_player_number].add_tile(self.tiles.pop())
+            print(f"CURR: {len(self.players[current_player_number].hidden_hand)}")
             current_player_number += 1
             current_player_number %= 4
 
         for player_redraw in self.players:
-            last_tile = player_redraw.hidden_hand[len(player_redraw.hidden_hand) - 1]
             while player_redraw.hidden_hand[len(player_redraw.hidden_hand) - 1].tiletype == 'flower':
                 last_tile = player_redraw.hidden_hand.pop()
                 while last_tile.tiletype == 'flower':
                     player_redraw.flowers.append(last_tile)
                     # print("FLOWER REDRAW PLAYER " + str(player_redraw.player_id))
                     last_tile = self.tiles.pop()
-            player_redraw.add_tile(last_tile)
+                player_redraw.add_tile(last_tile)
+        self.current_player_no = 0
+        self.current_player = self.players[0]
+        state = self.get_state()
+        self.discard_tile(self.players[0], state)
 
     def setup_game(self):
         """
@@ -103,13 +105,10 @@ class MahjongGame:
         # print("SETUP")
 
         random.shuffle(self.tiles)
-        self.initialise_player_hands(0)
-        self.current_player_no = 0
+        self.initialise_player_hands()
+        self.current_player_no = 1
         self.current_player = self.players[self.current_player_no]
         self.discarded_tiles = []
-
-        if self.discard_tile(self.current_player) is not None:
-            self.game_over = True  # todo: why??
 
         # print("SETUP COMPLETE")
 
@@ -125,6 +124,7 @@ class MahjongGame:
         """
         temp_number = self.current_player_no
         for i in range(4):
+
             win_claim, pong_claim, add_kong_claim = (
                 self.players[temp_number].check_claims(self.circle_wind, i, self.latest_tile, state))
 
@@ -158,7 +158,11 @@ class MahjongGame:
                     "gameover": False
                 })
 
-                self.next_turn((temp_number - 1) % 4)
+                self.next_turn(temp_number)
+                # self.draw_tile(self.players[temp_number])
+                # # I don't think the bug is here anymore:
+                #  We aren't redrawing here why? Did I think that next turn would
+                # # : automatically draw or maybe it does? I
 
                 return False, False
             elif pong_claim:
@@ -181,7 +185,7 @@ class MahjongGame:
 
                 self.next_turn(temp_number)
 
-                return True, True
+                return False, True
             temp_number = (temp_number + 1) % 4
         return True, False
 
@@ -192,11 +196,11 @@ class MahjongGame:
         """
         self.winner = None
         self.game_over = False
+        print("GAME START")
         while not self.game_over and len(self.tiles) != 0:
             state = self.get_state()
             check_sheung, action_taken = self.check_interrupt(state)
-            # print(action_taken)
-            if not action_taken and check_sheung:  # kong takes latest tile
+            if not action_taken and check_sheung and self.latest_tile is not None:  # kong takes latest tile
                 sheung = self.current_player.decide_sheung(self.latest_tile, state)
                 if sheung is not None:
                     sheung_tiles = [self.current_player.hidden_hand[sheung[0]],
@@ -215,7 +219,8 @@ class MahjongGame:
                         "gameover": False
                     })
                     self.discard_tile(self.current_player, state)
-                else:
+                else:  # TODO: Issue with the ordering here, we need to draw tile both
+                    # TODO: if we choose not to sheung and otherwise
                     if self.draw_tile(self.current_player) is None:
                         break
                     self.discard_tile(self.current_player, state)
@@ -227,6 +232,18 @@ class MahjongGame:
                         "reward": 0.0,
                         "gameover": False
                     })
+            else:
+                if self.draw_tile(self.current_player) is None:
+                    break
+                self.discard_tile(self.current_player, state)
+                self.log.append({
+                    "player_id": self.current_player.player_id,
+                    "state": state,
+                    "action_type": "discard",
+                    "is_claim": False,
+                    "reward": 0.0,
+                    "gameover": False
+                })
             self.next_turn()
 
         if len(self.tiles) == 0:
@@ -255,6 +272,7 @@ class MahjongGame:
         """
         Add a tile to the player's hands and return
         """
+        print("START DRAW")
         drawn_tile = self.tiles.pop()
         state = self.get_state()
         while drawn_tile.tiletype == "flower" and len(self.tiles) != 0:
@@ -287,7 +305,9 @@ class MahjongGame:
                                                                        drawn_tile,
                                                                        drawn_tile,
                                                                        drawn_tile])
-            self.draw_tile(player)
+            latest_tile = self.draw_tile(player)  # TODO: here? need to discard?
+            return latest_tile
+
         self.latest_tile = latest_tile
         player.add_tile(drawn_tile)
         # print("Player " + str(player.player_id) + " put the following tile into your hand")
@@ -301,11 +321,10 @@ class MahjongGame:
         """
 
         discarded_tile = player.discard_tile(state)
-        self.latest_tile = discarded_tile # TODO WHAT IS THIS
+        self.latest_tile = discarded_tile  # TODO WHAT IS THIS
         self.discarded_tiles.append(discarded_tile)
         print("PLAYER " + str(player.player_id) + " DISCARDED")
         print(discarded_tile)
-        player.print_hand()
         player.hidden_hand.remove(discarded_tile)  # TODO: occasional bug here but so infrequent
         # TODO: that it's hard to detec tht ereason??
         # TODO: Something to do with discarded tile being a None
@@ -319,6 +338,9 @@ class MahjongGame:
             "reward": 0.0,
             "gameover": False
         })
+
+        print(f"LENGTH: {len(player.hidden_hand) % 3 != 2}")
+
 
     def next_turn(self, player_skip: Optional[int] = None):
         """
@@ -337,6 +359,7 @@ class MahjongGame:
         by the player in the given position. If discard_player is
         -1 then
         """
+        # TODO: Bug with scoring somewhere
         match fan:
             case 0:
                 if discard_player == -1:

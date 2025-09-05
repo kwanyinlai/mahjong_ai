@@ -115,6 +115,7 @@ class BasicBot(Player):
         # TODO: SOMEHOW WE ARE RETURNING NONE BECAUSE THE HAND IS EMPTY, WHY IS HAND EMPTY
         if discarded_tile is None:
             self.print_hand()
+            # TODO: we have 4 sets but somehow we are losing the eye. maybe to kong or something?
             raise ValueError(f"Length of hidden hand is {len(self.hidden_hand)}")
         return discarded_tile
 
