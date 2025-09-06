@@ -46,17 +46,18 @@ class Player:
         SHEUNG
         DISCARD
         """
+
         if not latest_tile:
             return False, False, False
         if self.decide_win(latest_tile, circle_wind, player_number, state):
-            print(" WHY ARENT WE CLAIMING")
             return True, False, False
         if latest_tile is not None:
             if self.decide_pong(latest_tile, state):
+
                 return False, True, False
             elif self.decide_add_kong(latest_tile, state):
-                return False, False, True
 
+                return False, False, True
         return False, False, False
 
     def set_hand(self):
@@ -86,6 +87,7 @@ class Player:
             potential_hand = []
             if self.hidden_hand[i + 1] == tile:  # check all possible combinations of 'eyes' first for efficiency
                 remaining_hand = self.hidden_hand.copy()
+
                 potential_hand.append([remaining_hand.pop(i), remaining_hand.pop(i)])
 
                 if self.can_fit_into_set(remaining_hand, potential_hand):
@@ -95,11 +97,12 @@ class Player:
 
             i += 1
 
-        possible_hands = sorted(possible_hands,
-                                key=lambda hand: Player.score_hand(hand, self.flowers, circle_wind, self.player_order),
-                                reverse=True)
+        sorted_hands = sorted(possible_hands,
+                              key=lambda hand: Player.score_hand(hand, self.flowers, circle_wind, self.player_order),
+                              reverse=True)
         if possible_hands:
-            highest_fan = Player.score_hand(possible_hands[0], self.flowers, circle_wind, self.player_order)
+            highest_fan = Player.score_hand(sorted_hands[0], self.flowers, circle_wind, self.player_order)
+            print(f'Current fan is {highest_fan}')
             if highest_fan >= 3:
                 return True
         return False
@@ -169,6 +172,7 @@ class Player:
         """
         Return a score for this hand, doesn't have to be complete (for potential fan)
         """
+        # TODO: We are mutating!!! Stop it!
         if len(potential_hand) == 0:
             return 0
         fan = 0
@@ -248,6 +252,8 @@ class Player:
 
         if len(potential_hand) == 0:
             return 0
+        potential_hand = potential_hand.copy()
+        flowers = flowers.copy()
         fan = 0
         ordered_flower = ['plum', 'orchid', 'chrysanthemum', 'bamboo']
         ordered_season = ['summer', 'spring', 'autumn', 'winter']
@@ -388,14 +394,9 @@ class Player:
         should implement functionality of deciding whether to claim or not
         """
         self.add_tile(latest_tile)
-        print(f"Player {self.player_id}")
-        print(f"REVEALED SETS = {len(self.revealed_sets)}")
         if not self.check_winning_hand(circle_wind, player_number):
             self.hidden_hand.remove(latest_tile)
-
-            print(f"REVEALED SETS = {len(self.revealed_sets)}")
             return False
-        print(f"WE ARE CLAIMING")
         return True
 
     def decide_sheung(self, latest_tile: MahjongTile, state: np.array = None) -> Tuple[int, int]:
@@ -442,8 +443,6 @@ class Player:
         Add the tile to the hand in a sorted order
         """
         bisect.insort(self.hidden_hand, drawn_tile)
-        print("We are adding now")
-        print(drawn_tile)
 
     def print_hand(self):
         """
@@ -460,6 +459,11 @@ class Player:
                 print(tile)
             print("SET END")
         print("==================")
+        print("FLOWERS")
+        for flower in self.flowers:
+            print(flower)
+        print("==================")
+
     # RL ENCODING ========================================================================
 
     def encode_hidden_hand(self) -> np.ndarray:
