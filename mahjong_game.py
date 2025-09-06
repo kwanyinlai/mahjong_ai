@@ -21,6 +21,7 @@ class MahjongGame:
     players: List[Player]
     current_player_no: int
     current_player: Player
+    discarding_player: Player
     discarded_tiles: List[MahjongTile]
     latest_tile: MahjongTile = None
     game_over: bool
@@ -141,6 +142,7 @@ class MahjongGame:
                 })
                 return False, True
             elif add_kong_claim:
+                print(f"Kong is called by Player {self.players[temp_number].player_id}")
                 for _ in range(3):
                     self.players[temp_number].hidden_hand.remove(self.latest_tile)
 
@@ -158,14 +160,13 @@ class MahjongGame:
                     "gameover": False
                 })
 
+                print(f"Hand length is reduced to {len(self.players[temp_number].hidden_hand)}")
+                print(f"Current have {len(self.players[temp_number].revealed_sets)} revealed sets")
                 self.next_turn(temp_number)
-                # self.draw_tile(self.players[temp_number])
-                # # I don't think the bug is here anymore:
-                #  We aren't redrawing here why? Did I think that next turn would
-                # # : automatically draw or maybe it does? I
-
                 return False, False
             elif pong_claim:
+
+                print(f"Pong is called by Player {self.players[temp_number].player_id}")
                 for _ in range(2):
                     self.players[temp_number].hidden_hand.remove(self.latest_tile)
                 self.players[temp_number].revealed_sets.append([self.latest_tile,
@@ -182,6 +183,10 @@ class MahjongGame:
                     "gameover": False
                 })
                 self.discard_tile(self.players[temp_number])
+
+                print(f"Hand length is reduced to {len(self.players[temp_number].hidden_hand)}")
+
+                print(f"Current have {len(self.players[temp_number].revealed_sets)} revealed sets")
 
                 self.next_turn(temp_number)
 
@@ -203,6 +208,7 @@ class MahjongGame:
             if not action_taken and check_sheung and self.latest_tile is not None:  # kong takes latest tile
                 sheung = self.current_player.decide_sheung(self.latest_tile, state)
                 if sheung is not None:
+                    print(f"Sheung is called by Player {self.current_player.player_id}")
                     sheung_tiles = [self.current_player.hidden_hand[sheung[0]],
                                     self.current_player.hidden_hand[sheung[1]]
                                     ]
@@ -219,6 +225,9 @@ class MahjongGame:
                         "gameover": False
                     })
                     self.discard_tile(self.current_player, state)
+                    print(f"Hand length is reduced to {len(self.current_player.hidden_hand)}")
+
+                    print(f"Current have {len(self.current_player.revealed_sets)} revealed sets")
                 else:  # TODO: Issue with the ordering here, we need to draw tile both
                     # TODO: if we choose not to sheung and otherwise
                     if self.draw_tile(self.current_player) is None:
@@ -233,6 +242,8 @@ class MahjongGame:
                         "gameover": False
                     })
             else:
+                if self.game_over:
+                    break
                 if self.draw_tile(self.current_player) is None:
                     break
                 self.discard_tile(self.current_player, state)
@@ -244,6 +255,10 @@ class MahjongGame:
                     "reward": 0.0,
                     "gameover": False
                 })
+            for player in self.players:
+                if len(player.hidden_hand) % 3 != 1:
+                    player.print_hand()
+                    raise ValueError
             self.next_turn()
 
         if len(self.tiles) == 0:
@@ -258,12 +273,19 @@ class MahjongGame:
             for player in self.players:
                 player.print_hand()
             # TODO: self draw and what not
+
             if self.current_player is self.winner:
                 scores = self.convert_score(self.winner.highest_fan, -1, self.winner.player_id)
                 print("SELF DRAW")
             else:
-                scores = self.convert_score(self.winner.highest_fan, self.current_player_no, self.winner.player_id)
+                if self.discarding_player is self.winner:
+                    raise ValueError
+                scores = self.convert_score(self.winner.highest_fan, self.discarding_player.player_order, self.winner.player_order)
                 print("DISCARD WIN")
+            print("BUG")
+            if (scores[0] + scores[1] + scores[2] + scores[3]) != 0:
+                print(scores)
+                raise ValueError
             for i in range(4):
                 self.players[i].score += scores[i]
             return self.winner
@@ -272,17 +294,20 @@ class MahjongGame:
         """
         Add a tile to the player's hands and return
         """
-        print("START DRAW")
         drawn_tile = self.tiles.pop()
         state = self.get_state()
+        print(f"Player {player.player_id} has drawn {drawn_tile}")
         while drawn_tile.tiletype == "flower" and len(self.tiles) != 0:
             player.flowers.append(drawn_tile)
             drawn_tile = self.tiles.pop()
-            # print("REDRAW FLOWER")
+            print(f"Player {player.player_id} has redrawn a flower to {drawn_tile}")
+            print(f"Hand length is reduced to {len(self.current_player.hidden_hand)}")
+            print(f"Current have {len(self.current_player.revealed_sets)} revealed sets")
+
         if player.decide_win(drawn_tile, self.circle_wind, self.current_player_no, state):
             self.game_over = True
             self.winner = player
-            print("WINNN")
+            print(f"Player {player.player_id} has claimed a win")
             print(player.player_id)
             state = self.get_state()
             self.log.append({
@@ -297,7 +322,6 @@ class MahjongGame:
         latest_tile, self.latest_tile = self.latest_tile, drawn_tile
         state = self.get_state()
         while player.decide_add_kong(drawn_tile, state) and len(self.tiles) > 0:
-            state = self.get_state()
             for _ in range(3):
                 self.players[self.current_player_no].hidden_hand.remove(drawn_tile)
 
@@ -305,11 +329,19 @@ class MahjongGame:
                                                                        drawn_tile,
                                                                        drawn_tile,
                                                                        drawn_tile])
+            print(f"Player {player.player_id} has claimed a kong")
+            print(f"Player {player.player_id} is redrawing")
             latest_tile = self.draw_tile(player)  # TODO: here? need to discard?
+            if latest_tile is None:
+                return None
+            print(f"Hand length is reduced to {len(self.current_player.hidden_hand)}")
+            print(f"Current have {len(self.current_player.revealed_sets)} revealed sets")
             return latest_tile
 
         self.latest_tile = latest_tile
         player.add_tile(drawn_tile)
+        print(f"Hand length is reduced to {len(self.current_player.hidden_hand)}")
+        print(f"Current have {len(self.current_player.revealed_sets)} revealed sets")
         # print("Player " + str(player.player_id) + " put the following tile into your hand")
         # print(drawn_tile)
         return drawn_tile
@@ -323,12 +355,11 @@ class MahjongGame:
         discarded_tile = player.discard_tile(state)
         self.latest_tile = discarded_tile  # TODO WHAT IS THIS
         self.discarded_tiles.append(discarded_tile)
-        print("PLAYER " + str(player.player_id) + " DISCARDED")
-        print(discarded_tile)
+        print(f"Player {player.player_id} discarded {discarded_tile}")
         player.hidden_hand.remove(discarded_tile)  # TODO: occasional bug here but so infrequent
         # TODO: that it's hard to detec tht ereason??
         # TODO: Something to do with discarded tile being a None
-
+        print(f"Hand length is reduced to {len(player.hidden_hand)}")
         player.discard_pile.append(discarded_tile)
         self.log.append({
             "player_id": self.current_player.player_id,
@@ -338,9 +369,7 @@ class MahjongGame:
             "reward": 0.0,
             "gameover": False
         })
-
-        print(f"LENGTH: {len(player.hidden_hand) % 3 != 2}")
-
+        self.discarding_player = player
 
     def next_turn(self, player_skip: Optional[int] = None):
         """
@@ -360,6 +389,8 @@ class MahjongGame:
         -1 then
         """
         # TODO: Bug with scoring somewhere
+        if discard_player == winning_player:
+            raise ValueError
         match fan:
             case 0:
                 if discard_player == -1:
