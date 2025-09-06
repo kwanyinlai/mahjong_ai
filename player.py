@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import bisect
+import copy
 from typing import List, Tuple
 
 import numpy as np
@@ -76,7 +77,7 @@ class Player:
         self.hidden_hand = [tile1, tile1, tile2, tile2, tile2, tile3, tile4, tile4, tile5, tile5, tile5, tile5, tile5,
                             tile6, tile9, tile9, tile9]
 
-    def check_winning_hand(self, circle_wind: str, player_number: int) -> bool:
+    def check_winning_hand(self, circle_wind: str) -> bool:
         """
         Check whether the player currently has a winning hand
         """
@@ -100,9 +101,10 @@ class Player:
         sorted_hands = sorted(possible_hands,
                               key=lambda hand: Player.score_hand(hand, self.flowers, circle_wind, self.player_order),
                               reverse=True)
-        if possible_hands:
+        if sorted_hands:
             highest_fan = Player.score_hand(sorted_hands[0], self.flowers, circle_wind, self.player_order)
             print(f'Current fan is {highest_fan}')
+
             if highest_fan >= 3:
                 return True
         return False
@@ -249,78 +251,97 @@ class Player:
         """
         Return a score for this hand, doesn't have to be complete (for potential fan)
         """
-
         if len(potential_hand) == 0:
             return 0
-        potential_hand = potential_hand.copy()
-        flowers = flowers.copy()
+        hand_copy = copy.deepcopy(potential_hand)
+        flower_copy = copy.deepcopy(flowers)
         fan = 0
         ordered_flower = ['plum', 'orchid', 'chrysanthemum', 'bamboo']
         ordered_season = ['summer', 'spring', 'autumn', 'winter']
         ordered_cardinal = ['east', 'south', 'west', 'north']
-        if len(flowers) == 0:
+        if len(flower_copy) == 0:
             fan += 1
-        elif ['plum', 'orchid', 'chrysanthemum', 'bamboo'] <= [flower.numchar for flower in flowers]:
+            print("No flowers")
+        elif {'plum', 'orchid', 'chrysanthemum', 'bamboo'} <= {flower.numchar for flower in flower_copy}:
             fan += 2
-        elif ['summer', 'spring', 'autumn', 'winter'] <= [flower.numchar for flower in flowers]:
+            print("Full set of flowers")
+        elif {'summer', 'spring', 'autumn', 'winter'} <= {flower.numchar for flower in flower_copy}:
             fan += 2
+            print("Full set of flowers")
         else:
-            if any(flower.numchar == ordered_flower[player_number] for flower in flowers):
+            if any(flower.numchar == ordered_flower[player_number] for flower in flower_copy):
                 fan += 1
-            if any(season.numchar == ordered_season[player_number] for season in flowers):
+                print("Correct flowers")
+            if any(season.numchar == ordered_season[player_number] for season in flower_copy):
                 fan += 1
+                print("Correct flowers")
 
         honour_sets = []
         wind_sets = []
 
         i = 0
-        while i < len(potential_hand):
-            if potential_hand[i][0].subtype == 'honour':
-                honour_sets.append(potential_hand.pop(i))
-            elif potential_hand[i][0].subtype == 'wind':
-                wind_sets.append(potential_hand.pop(i))
+        while i < len(hand_copy):
+            if hand_copy[i][0].subtype == 'dragon':
+                honour_sets.append(hand_copy.pop(i))
+                i -= 1
+            elif hand_copy[i][0].subtype == 'wind':
+                wind_sets.append(hand_copy.pop(i))
+                i -= 1
             i += 1
 
         if len(honour_sets) == 3 and all(len(full_set) == 3 for full_set in honour_sets):
             fan += 8
+            print("Great dragons")
             return fan
         elif len(honour_sets) == 3:
+            print("Small dragon")
             fan += 5
         else:
-            fan += len([full_set for full_set in honour_sets if len(full_set) > 2])
+            dragon_sets = len([full_set for full_set in honour_sets if len(full_set) > 2])
+            fan += dragon_sets
+            for _ in range(dragon_sets):
+                print("Dragon")
 
         if len(wind_sets) == 4 and all(len(full_set) == 3 for full_set in wind_sets):
             fan += 13
+            print("Great winds")
             return fan
         elif len(wind_sets) == 4:
             fan += 6
+            print("Minor winds")
         else:
             if any(full_set[0].numchar == circle_wind and len(full_set) == 3 for full_set in wind_sets):
                 fan += 1
+                print("Correct circle wind")
             if any(full_set[0].numchar == ordered_cardinal[player_number] and
                    len(full_set) == 3 for full_set in wind_sets):
                 fan += 1
+                print("Correct player wind")
 
-        if all(potential_hand[i][0].subtype == potential_hand[i + 1][0].subtype for i in
-               range(0, len(potential_hand) - 1)):
+        if all(hand_copy[i][0].subtype == hand_copy[i + 1][0].subtype for i in
+               range(0, len(hand_copy) - 1)):
             if len(honour_sets) == 0 and len(wind_sets) == 0:
                 fan += 5
+                print("All one set")
             else:
                 fan += 3
+                print("Mixed one set")
 
         i = 0
-
-        while i < len(potential_hand) and len(potential_hand[i]) < 2:
+        while i < len(hand_copy) and len(hand_copy[i]) == 3:
             i += 1
-        potential_hand.pop(i)  # remove the eye
+        if i != len(hand_copy):
+            hand_copy.pop(i)  # remove the eye, otherwise already removed in winds
 
         # dui dui wu
-        if all(tile[0] == tile[1] for tile in potential_hand):
+        if all(tile[0] == tile[1] for tile in hand_copy):
             fan += 3
+            print("All triplets")
         # assuming possible hands is structured correctly and can only contain a straight or a triplet
         elif all(tile[0].tiletype == "suit" and tile[1].tiletype == "suit" and
-                 tile[0].numchar == tile[1].numchar + 1 for tile in potential_hand):  #ping wu
+                 tile[0].numchar == tile[1].numchar + 1 for tile in hand_copy):  #ping wu
             fan += 1
+            print("All straights")
         return fan
 
     def show_all_possible_sheungs(self, latest_tile: MahjongTile) -> \
@@ -388,13 +409,13 @@ class Player:
 
         return True
 
-    def decide_win(self, latest_tile, circle_wind, player_number, state: np.array = None) -> bool:
+    def decide_win(self, latest_tile, circle_wind, state: np.array = None) -> bool:
         """
         Base functions check if a win is can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not
         """
         self.add_tile(latest_tile)
-        if not self.check_winning_hand(circle_wind, player_number):
+        if not self.check_winning_hand(circle_wind):
             self.hidden_hand.remove(latest_tile)
             return False
         return True
