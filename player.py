@@ -390,7 +390,7 @@ class Player:
             (Tuple[Tuple[int, int] | None, Tuple[int, int] | None, Tuple[int, int] | None]):
         """
 
-        return a 3 item tuple with None if the corresponding sheung is not possible, else the indices in
+        return a 3-tuple with None if the corresponding sheung is not possible, else the indices in
         self._hidden_hand of the corresponding tiles necessary to form the sheung
         first is for lower sheung, second for middle sheung, third for upper sheung
         """
@@ -495,7 +495,7 @@ class Player:
 
         return True
 
-    def discard_tile(self, state: np.array = None) -> MahjongTile:
+    def discard_tile(self, state: np.ndarray = None) -> MahjongTile:
         """
         Discard a tile from hand
         """

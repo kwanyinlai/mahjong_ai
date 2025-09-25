@@ -31,7 +31,7 @@ class RLAgent(Player):
             return False
         return self.policy.select_win(state)
 
-    def decide_pong(self, tile: MahjongTile, state: np.array) -> bool:
+    def decide_pong(self, tile: MahjongTile, state: np.ndarray) -> bool:
         """
 
         :param tile:
@@ -42,7 +42,7 @@ class RLAgent(Player):
             return False
         return self.policy.select_pong(state)
 
-    def decide_add_kong(self, tile: MahjongTile, state: np.array):
+    def decide_add_kong(self, tile: MahjongTile, state: np.ndarray):
         """
 
         :param tile:
