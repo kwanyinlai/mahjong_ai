@@ -16,7 +16,7 @@ class MahjongTable:
     players: List[Player]
 
     def __init__(self):
-        self.players = [BasicBot(i) for i in range(4)]
+        self.players = [BasicBot(i, i) for i in range(4)]
         self.starting_player = self.players[0]
 
     def start_table(self):
@@ -39,6 +39,30 @@ class MahjongTable:
                     player.player_order = (player.player_order + 1) % 4
                 if player_start == 4:
                     player_start = 0
-                    round_no += 1 # TODO: Set up order properly
+                    round_no += 1
+
+    def run_concurrent_games(self):
+        """
+        Run MahjongGame instances concurrently using multiprocessing
+        :return:
+        """
+        # ROUND
+        game1 = MahjongGame(self.players, self.circle_wind[0])
+        game2 = MahjongGame(self.players, self.circle_wind[1])
+        game3 = MahjongGame(self.players, self.circle_wind[2])
+        game4 = MahjongGame(self.players, self.circle_wind[3])
+        pass
+
 
 # TODO: Support multithreading
+
+
+"""
+Reference Code from main.py
+
+table = MahjongTable()
+    table.start_table()
+    for player in table.players:
+        print(f"Final score for Player {player.player_id}: {player.score}")
+
+"""

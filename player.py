@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import bisect
 import copy
-from typing import List, Tuple
+from typing import List, Set, Tuple
 
 import numpy as np
 
@@ -21,24 +21,30 @@ class Player:
     score: int = 0
     player_order: int
     highest_fan: int = 0
+    _orphans: Set[MahjongTile] = set()
 
-    def __init__(self, player_id):
+    def __init__(self, player_id: int, player_order: int):
         self.player_id = player_id
         self.hidden_hand = []
         self.revealed_sets = []
         self.flowers = []
         self.discard_pile = []
         self.total_score = 0
-        self.player_order = player_id
+        self.player_order = player_order
+        self._set_orphans()
 
-    def soft_reset(self):
+    def soft_reset(self) -> None:
+        """
+        Reset all non-global attributes
+        :return:
+        """
         self.hidden_hand = []
         self.revealed_sets = []
         self.flowers = []
         self.discard_pile = []
-        self.highest_scoring_hand = 0
+        self.highest_fan = 0
 
-    def check_claims(self, circle_wind, player_number, latest_tile: MahjongTile = None,
+    def check_claims(self, circle_wind: str, player_number: int, latest_tile: MahjongTile = None,
                      state: np.ndarray = None) -> Tuple[bool, bool, bool]:
         """
         WIN_CLAIM
@@ -50,20 +56,19 @@ class Player:
 
         if not latest_tile:
             return False, False, False
-        if self.decide_win(latest_tile, circle_wind, player_number, state):
+        if self.decide_win(latest_tile, circle_wind, state):
             return True, False, False
         if latest_tile is not None:
             if self.decide_pong(latest_tile, state):
-
                 return False, True, False
             elif self.decide_add_kong(latest_tile, state):
-
                 return False, False, True
         return False, False, False
 
-    def set_hand(self):
+    def _set_hand(self) -> None:
         """
-        Set hand for a player for testing
+        Set the hand for a player to a specified set
+        !!!! FOR TESTING PURPOSES ONLY !!!!
         """
         tile1 = MahjongTile(tiletype="suit", subtype="circle", numchar=1)
         tile2 = MahjongTile(tiletype="suit", subtype="circle", numchar=2)
@@ -79,8 +84,14 @@ class Player:
 
     def check_winning_hand(self, circle_wind: str) -> bool:
         """
-        Check whether the player currently has a winning hand
+        Check and return whether the player currently has a winning hand
+        with sufficient 'faan' score
         """
+
+        if self.check_thirteen_orphans():
+            self.highest_fan = 13 + self.count_flower_fan()
+            return True
+
         possible_hands = []
         i = 0
         while i < len(self.hidden_hand) - 1:
@@ -106,14 +117,39 @@ class Player:
             print(f'Current fan is {highest_fan}')
 
             if highest_fan >= 3:
+                self.highest_fan = highest_fan
                 return True
         return False
 
-    def check_thirteen_orphans(self, remaining_hand, potential_hand):
+    def _set_orphans(self):
+        """
+        Set thirteen orphans
+        :return:
+        """
+        tile1 = MahjongTile(tiletype="suit", subtype="circle", numchar=1)
+        tile2 = MahjongTile(tiletype="suit", subtype="circle", numchar=9)
+        tile3 = MahjongTile(tiletype="suit", subtype="bamboo", numchar=1)
+        tile4 = MahjongTile(tiletype="suit", subtype="bamboo", numchar=9)
+        tile5 = MahjongTile(tiletype="suit", subtype="number", numchar=1)
+        tile6 = MahjongTile(tiletype="suit", subtype="number", numchar=9)
+        tile7 = MahjongTile(tiletype="honour", subtype="dragon", numchar='red')
+        tile8 = MahjongTile(tiletype="honour", subtype="dragon", numchar='white')
+        tile9 = MahjongTile(tiletype="honour", subtype="dragon", numchar='green')
+        tile10 = MahjongTile(tiletype="honour", subtype="wind", numchar='north')
+        tile11 = MahjongTile(tiletype="honour", subtype="wind", numchar='east')
+        tile12 = MahjongTile(tiletype="honour", subtype="wind", numchar='south')
+        tile13 = MahjongTile(tiletype="honour", subtype="wind", numchar='west')
+        self.orphans = {tile1, tile2, tile3, tile4, tile5, tile6, tile7, tile8, tile9, tile10,
+                        tile11, tile12, tile13}
+
+    def check_thirteen_orphans(self):
         """
         Edge case of thirteen orphans to be checked with winning hand
         """
-        pass
+        pair_exists = any(self.hidden_hand[i] == self.hidden_hand[i+1] for i in range(len(self.hidden_hand)-1))
+        all_orphans = self.orphans <= {tile for tile in self.hidden_hand}
+
+        return len(self.hidden_hand) == 14 and pair_exists and all_orphans
 
     def can_fit_into_set(self, remaining_hand: List[MahjongTile], potential_hand: List[List[MahjongTile]]):
         """
@@ -174,38 +210,37 @@ class Player:
         """
         Return a score for this hand, doesn't have to be complete (for potential fan)
         """
-        # TODO: We are mutating!!! Stop it!
         if len(potential_hand) == 0:
             return 0
+        hand_copy = copy.deepcopy(potential_hand)
+        flower_copy = copy.deepcopy(flowers)
         fan = 0
         ordered_flower = ['plum', 'orchid', 'chrysanthemum', 'bamboo']
         ordered_season = ['summer', 'spring', 'autumn', 'winter']
         ordered_cardinal = ['east', 'south', 'west', 'north']
-        # TODO: Need a potential faan function which finds completed sets
-        # TODO: Maybe use my check winning hands function but don't discard
-        # TODO: incomplete hands and just toss away the incomplete part and return
-        # TODO: the fan score of the remaining hand and the distance from completion.
-        if len(flowers) == 0:
+        if len(flower_copy) == 0:
             fan += 1
-        elif ['plum', 'orchid', 'chrysanthemum', 'bamboo'] <= [flower.numchar for flower in flowers]:
+        elif {'plum', 'orchid', 'chrysanthemum', 'bamboo'} <= {flower.numchar for flower in flower_copy}:
             fan += 2
-        elif ['summer', 'spring', 'autumn', 'winter'] <= [flower.numchar for flower in flowers]:
+        elif {'summer', 'spring', 'autumn', 'winter'} <= {flower.numchar for flower in flower_copy}:
             fan += 2
         else:
-            if any(flower.numchar == ordered_flower[player_number] for flower in flowers):
+            if any(flower.numchar == ordered_flower[player_number] for flower in flower_copy):
                 fan += 1
-            if any(season.numchar == ordered_season[player_number] for season in flowers):
+            if any(season.numchar == ordered_season[player_number] for season in flower_copy):
                 fan += 1
 
         honour_sets = []
         wind_sets = []
 
         i = 0
-        while i < len(potential_hand):
-            if potential_hand[i][0].subtype == 'honour':
-                honour_sets.append(potential_hand.pop(i))
-            elif potential_hand[i][0].subtype == 'wind':
-                wind_sets.append(potential_hand.pop(i))
+        while i < len(hand_copy):
+            if hand_copy[i][0].subtype == 'dragon':
+                honour_sets.append(hand_copy.pop(i))
+                i -= 1
+            elif hand_copy[i][0].subtype == 'wind':
+                wind_sets.append(hand_copy.pop(i))
+                i -= 1
             i += 1
 
         if len(honour_sets) == 3 and all(len(full_set) == 3 for full_set in honour_sets):
@@ -214,7 +249,8 @@ class Player:
         elif len(honour_sets) == 3:
             fan += 5
         else:
-            fan += len([full_set for full_set in honour_sets if len(full_set) > 2])
+            dragon_sets = len([full_set for full_set in honour_sets if len(full_set) > 2])
+            fan += dragon_sets
 
         if len(wind_sets) == 4 and all(len(full_set) == 3 for full_set in wind_sets):
             fan += 13
@@ -228,22 +264,28 @@ class Player:
                    len(full_set) == 3 for full_set in wind_sets):
                 fan += 1
 
-        if all(potential_hand[i][0].subtype == potential_hand[i + 1][0].subtype for i in
-               range(0, len(potential_hand) - 1)):
+        if all(hand_copy[i][0].subtype == hand_copy[i + 1][0].subtype for i in
+               range(0, len(hand_copy) - 1)):
             if len(honour_sets) == 0 and len(wind_sets) == 0:
                 fan += 5
             else:
                 fan += 3
 
+        i = 0
+        while i < len(hand_copy) and len(hand_copy[i]) == 3:
+            i += 1
+        if i != len(hand_copy):
+            hand_copy.pop(i)  # remove the eye, otherwise already removed in winds
+
         # dui dui wu
-        if all(tile[0] == tile[1] for tile in potential_hand):
+        if all(tile[0] == tile[1] for tile in hand_copy):
             fan += 3
         # assuming possible hands is structured correctly and can only contain a straight or a triplet
         elif all(tile[0].tiletype == "suit" and tile[1].tiletype == "suit" and
-                 tile[0].numchar == tile[1].numchar + 1 for tile in potential_hand):  #ping wu
+                 tile[0].numchar == tile[1].numchar + 1 for tile in hand_copy):  # ping wu
             fan += 1
 
-        return fan * len(potential_hand) / 4  # normalised fan based on completion
+        return fan * len(potential_hand) * 3 // 14  # normalised fan based on completion
 
     @staticmethod
     def score_hand(potential_hand: List[List[MahjongTile]], flowers: List[MahjongTile],
@@ -393,7 +435,7 @@ class Player:
 
         return lower_sheung, mid_sheung, high_sheung
 
-    def decide_add_kong(self, latest_tile: MahjongTile, state: np.array = None) -> bool:
+    def decide_add_kong(self, latest_tile: MahjongTile, state: np.ndarray = None) -> bool:
         """
         Base functions check if a kong is possible. All inheriting functions
         should implement functionality of removing the tiles, and whether to
@@ -409,7 +451,7 @@ class Player:
 
         return True
 
-    def decide_win(self, latest_tile, circle_wind, state: np.array = None) -> bool:
+    def decide_win(self, latest_tile, circle_wind, state: np.ndarray = None) -> bool:
         """
         Base functions check if a win is can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not
@@ -513,3 +555,10 @@ class Player:
         for tile in self.discard_pile:
             vec[tile.to_index()] += 1
         return vec
+
+    def count_flower_fan(self) -> int:
+        """
+        Count number of faan by flower
+        :return:
+        """
+        return 0

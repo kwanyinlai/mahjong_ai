@@ -6,8 +6,7 @@ if __name__ == "__main__":
     table = MahjongTable()
     table.start_table()
     for player in table.players:
-        print(player.player_id)
-        print("SCORE: " + str(player.score))
+        print(f"Final score for Player {player.player_id}: {player.score}")
 
     # game = MahjongGame([BasicBot(i) for i in range(4)], "east")
     # game.play_round()
@@ -19,7 +18,3 @@ if __name__ == "__main__":
 
     # MahjongGame.test_win_scenario()
     # MahjongGame.test_win_claim()
-
-# TODO: Need to play the next player - doesn't work right now
-# TODO: Check self draw wins
-# TODO: Still major bugs with duplicate tiles

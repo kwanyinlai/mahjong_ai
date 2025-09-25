@@ -84,6 +84,7 @@ class MahjongTile:
         elif self.subtype == "dragon":
             dragon_order = {"red": 31, "green": 32, "white": 33}
             return dragon_order[self.numchar]
+        raise ValueError
 
     @staticmethod
     def index_to_tile(index: int) -> MahjongTile:

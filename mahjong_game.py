@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import random
 import bisect
 from typing import Dict, Union, List, Optional, Tuple
@@ -218,8 +217,7 @@ class MahjongGame:
                     })
                     self.discard_tile(self.current_player, state)
 
-                else:  # TODO: Issue with the ordering here, we need to draw tile both
-                    # TODO: if we choose not to sheung and otherwise
+                else:
                     if self.draw_tile(self.current_player) is None:
                         break
                     self.discard_tile(self.current_player, state)
@@ -248,7 +246,7 @@ class MahjongGame:
             for player in self.players:
                 if len(player.hidden_hand) % 3 != 1 and not self.game_over:
                     player.print_hand()
-                    raise ValueError # TODO: Check claiming win
+                    raise ValueError
             self.next_turn()
 
         if len(self.tiles) == 0:
@@ -261,19 +259,19 @@ class MahjongGame:
             print("==================")
             print(f"Player {self.winner.player_id} won")
             self.winner.print_hand()
-            # TODO: self draw and what not
 
             if self.current_player is self.winner:
                 scores = self.convert_score(self.winner.highest_fan, -1, self.winner.player_id)
                 print("Self draw")
             else:
                 if self.discarding_player is self.winner:
-                    raise ValueError # TODO: check discarding logic and setting discarder
-                scores = self.convert_score(self.winner.highest_fan, self.discarding_player.player_order, self.winner.player_order)
+                    raise ValueError
+                scores = self.convert_score(self.winner.highest_fan, self.discarding_player.player_order,
+                                            self.winner.player_order)
                 print("Discard win")
             if (scores[0] + scores[1] + scores[2] + scores[3]) != 0:
                 print(scores)
-                raise ValueError
+                raise ValueError("Scores do not add up to zero.")
             for i in range(4):
                 self.players[i].score += scores[i]
             return self.winner
@@ -317,7 +315,7 @@ class MahjongGame:
                                                                        drawn_tile])
             print(f"Player {player.player_id} has claimed a kong")
             print(f"Player {player.player_id} is redrawing")
-            latest_tile = self.draw_tile(player)  # TODO: here? need to discard?
+            latest_tile = self.draw_tile(player)
             return latest_tile
 
         self.latest_tile = latest_tile
@@ -333,13 +331,11 @@ class MahjongGame:
         """
 
         discarded_tile = player.discard_tile(state)
-        self.latest_tile = discarded_tile  # TODO WHAT IS THIS
+        self.latest_tile = discarded_tile
         self.discarded_tiles.append(discarded_tile)
         self.discarding_player = player
         print(f"Player {player.player_id} discarded {discarded_tile}")
-        player.hidden_hand.remove(discarded_tile)  # TODO: occasional bug here but so infrequent
-        # TODO: that it's hard to detec tht ereason??
-        # TODO: Something to do with discarded tile being a None
+        player.hidden_hand.remove(discarded_tile)
         player.discard_pile.append(discarded_tile)
         self.log.append({
             "player_id": self.current_player.player_id,
@@ -371,7 +367,6 @@ class MahjongGame:
         by the player in the given position. If discard_player is
         -1 then
         """
-        # TODO: Bug with scoring somewhere
         if discard_player == winning_player:
             raise ValueError
         match fan:
@@ -443,6 +438,17 @@ class MahjongGame:
                     scores[winning_player] = 256
                     scores[discard_player] = -256
                     return scores
+
+    def run_concurrent_game(self, players: List[Player]) -> List[int]:
+        """
+        .
+        """
+        score = []
+        is_draw = True
+        while players[0] is self.winner or is_draw:
+            winner = self.play_round()
+
+
 
     # TESTING METHODS ====================================================================
     # ====================================================================================
@@ -587,50 +593,47 @@ class MahjongGame:
 
         # STATE ===========================================================================
 
+    def get_player_state(self, player: Player) -> np.ndarray:
+        """
+        :param player:
+        :return:
+        """
+        hidden = player.encode_hidden_hand()  # 34
+        revealed = player.encode_revealed_hand()  # 34
+        discards = player.encode_discarded_pile()  # 34
+        potential_fan = np.array([Player.potential_fan(
+            player.revealed_sets,
+            player.flowers,
+            self.circle_wind,
+            player.player_order
+        )], dtype=int)  # 1
+
+        # 34*3 + 1 = 103
+        return np.concatenate([hidden, revealed, discards, potential_fan])
+
     def get_state(self):
         """
 
-        :param latest_tile:
         :return:
         """
-        # TODO: Restructure this to put all of one player's information together
-        # TODO: probably not important to keep in same position if has current player's turn
-        hidden_vec = []
-        revealed_vec = []
-        discards_vec = []
-        hand_potential = []
-        for player in self.players:
-            hidden = player.encode_hidden_hand()
-            revealed = player.encode_revealed_hand()
-            discards = player.encode_discarded_pile()
-            hidden_vec.append(hidden)
-            revealed_vec.append(revealed)
-            discards_vec.append(discards)
-            # potential_fan = Player.potential_fan(player.revealed_sets,
-            #                                      player.flowers,
-            #                                      self.circle_wind,
-            #                                      player.player_order)
+        players = self.players
+        player_states = [self.get_player_state(player) for player in players]
+        player_states_vec = np.concatenate(player_states)  # 4 * 103
 
-        hidden_vec = np.concatenate(hidden_vec)
-        revealed_vec = np.concatenate(revealed_vec)
-        discards_vec = np.concatenate(discards_vec)
-
-        latest_tile_vec = np.zeros(34, dtype=int)
+        latest_tile_vec = np.zeros(34, dtype=int)  # 34
         if self.latest_tile is not None:
             latest_tile_vec[self.latest_tile.to_index()] = 1
 
-        # Tiles remaining in the wall
-        tiles_remaining = np.array([len(self.tiles)])
+        tiles_remaining = np.array([len(self.tiles)], dtype=int)  # 1
 
-        current_turn = np.array([self.current_player_no])
+        current_turn = np.zeros(len(players), dtype=int)  # 4
+        current_turn[self.current_player.player_order] = 1
 
         state = np.concatenate([
-            hidden_vec,  # 34 * 4
-            revealed_vec,  # 34 * 4
-            discards_vec,  # 34 * 4
-            latest_tile_vec,  # 34 * 1
-            tiles_remaining,  # 1
-            current_turn  # 1
+            player_states_vec,
+            latest_tile_vec,
+            tiles_remaining,
+            current_turn
         ])
 
         return state
@@ -671,7 +674,7 @@ class MahjongGame:
         """
 
         :param winloss:
-        :param fan:
+        :param score:
         :return:
         """
         return winloss * score
