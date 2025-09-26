@@ -606,7 +606,7 @@ class MahjongGame:
             player.flowers,
             self.circle_wind,
             player.player_order
-        )], dtype=int)  # 1
+        ) / 20.0 ], dtype=np.float32)  # 1, max fan is 20
 
         # 34*3 + 1 = 103
         return np.concatenate([hidden, revealed, discards, potential_fan])
@@ -620,14 +620,15 @@ class MahjongGame:
         player_states = [self.get_player_state(player) for player in players]
         player_states_vec = np.concatenate(player_states)  # 4 * 103
 
-        latest_tile_vec = np.zeros(34, dtype=int)  # 34
+        latest_tile_vec = np.zeros(34, dtype=np.float32)  # 34
         if self.latest_tile is not None:
-            latest_tile_vec[self.latest_tile.to_index()] = 1
+            latest_tile_vec[self.latest_tile.to_index()] = 1.0
 
-        tiles_remaining = np.array([len(self.tiles)], dtype=int)  # 1
+        tiles_remaining = np.array([len(self.tiles) / 144], dtype=np.float32)  # 1,
+        # normalised since HK Mahjong uses 144 tiles
 
-        current_turn = np.zeros(len(players), dtype=int)  # 4
-        current_turn[self.current_player.player_order] = 1
+        current_turn = np.zeros(len(players), dtype=np.float32)  # 4
+        current_turn[self.current_player.player_order] = 1.0
 
         state = np.concatenate([
             player_states_vec,
@@ -668,6 +669,10 @@ class MahjongGame:
 
         with open(filepath, "w") as f:
             json.dump(test, f)
+
+    def get_valid_actions(self):
+        actions = []
+        if player
 
     @staticmethod
     def reward_function(winloss: int, score: int) -> float:
