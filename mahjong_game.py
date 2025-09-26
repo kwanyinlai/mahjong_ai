@@ -671,8 +671,16 @@ class MahjongGame:
             json.dump(test, f)
 
     def get_valid_actions(self):
-        actions = []
-        if player
+        actions = [i for i in range(0, self.current_player.get_hand_length())]
+        if self.current_player.decide_win(self.latest_tile, self.circle_wind, 0):
+            actions.append(14)
+        if self.current_player.decide_pong(self.latest_tile):
+            actions.append(15)
+        if self.current_player.decide_sheung(self.latest_tile):
+            actions.append(16)
+        if self.current_player.decide_add_kong():
+            actions.append(17)
+
 
     @staticmethod
     def reward_function(winloss: int, score: int) -> float:

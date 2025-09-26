@@ -562,3 +562,6 @@ class Player:
         :return:
         """
         return 0
+
+    def get_hand_length(self):
+        return len(self.hidden_hand)
