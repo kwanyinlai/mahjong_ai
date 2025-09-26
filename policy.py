@@ -39,36 +39,32 @@ class Policy:
         raise NotImplementedError
 
 
-class Policy:
-    """
-    Policy governing bot
-    """
-
+class SimplePolicy(Policy):
     def select_discard(self, state: np.ndarray, hidden_hand: List[MahjongTile]) -> MahjongTile:
         """
         Return the index of the tile to discard in player's hand
         :param state:
         :param hidden_hand:
         """
-        raise NotImplementedError
+        return hidden_hand[0]
 
     def select_win(self, state: np.ndarray) -> bool:
         """
 
         :param state:
         """
-        raise NotImplementedError
+        return True
 
     def select_pong(self, state: np.ndarray) -> bool:
         """
 
         :param state:
         """
-        raise NotImplementedError
+        return False
 
     def select_add_kong(self, state: np.ndarray) -> bool:
         """
 
         :param state:
         """
-        raise NotImplementedError
+        return True
