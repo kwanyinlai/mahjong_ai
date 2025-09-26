@@ -451,7 +451,7 @@ class Player:
 
         return True
 
-    def decide_win(self, latest_tile, circle_wind, state: np.ndarray = None) -> bool:
+    def decide_win(self, latest_tile, circle_wind, player_number: int, state: np.ndarray = None) -> bool:
         """
         Base functions check if a win is can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not
@@ -533,28 +533,28 @@ class Player:
         """
         Encode player's hidden hand
         """
-        vec = np.zeros(34, dtype=int)
+        vec = np.zeros(34, dtype=np.float32)
         for tile in self.hidden_hand:
             vec[tile.to_index()] += 1
-        return vec
+        return vec / 4.0
 
     def encode_revealed_hand(self) -> np.ndarray:
         """
         Encode player's revealed hand (completed sets)
         """
-        vec = np.zeros(34, dtype=int)
+        vec = np.zeros(34, dtype=np.float32)
         for tile in [tile for subset in self.revealed_sets for tile in subset]:
             vec[tile.to_index()] += 1
-        return vec
+        return vec / 4.0
 
     def encode_discarded_pile(self):
         """
         Encode player's discard pile
         """
-        vec = np.zeros(34, dtype=int)
+        vec = np.zeros(34, dtype=np.float32)
         for tile in self.discard_pile:
             vec[tile.to_index()] += 1
-        return vec
+        return vec / 4.0
 
     def count_flower_fan(self) -> int:
         """
