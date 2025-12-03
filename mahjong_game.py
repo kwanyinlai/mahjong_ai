@@ -96,7 +96,6 @@ class MahjongGame:
         self.current_player_no = 0
         self.current_player = self.players[0]
         state = self.get_state()
-        self.discard_tile(self.players[0], state)
 
     def setup_game(self):
         """
@@ -106,7 +105,7 @@ class MahjongGame:
 
         random.shuffle(self.tiles)
         self.initialise_player_hands()
-        self.current_player_no = 1
+        self.current_player_no = 0
         self.current_player = self.players[self.current_player_no]
         self.discarded_tiles = []
 
@@ -116,75 +115,6 @@ class MahjongGame:
     # ====================================================================================
     # ====================================================================================
 
-    def check_interrupt(self, state: np.ndarray = None) -> Tuple[bool, bool]:
-        """
-        Check if should check sheung, and if to interrupt turn flow (bool 1 and
-        2 respectively)
-        :return:
-        """
-        temp_number = self.current_player_no
-        for i in range(4):
-            win_claim, pong_claim, add_kong_claim = (
-                self.players[temp_number].check_claims(self.circle_wind, i, self.latest_tile, state))
-            if win_claim:
-                self.game_over = True
-                self.winner = self.players[temp_number]
-                self.log.append({
-                    "player_id": self.current_player.player_id,
-                    "state": state,
-                    "action_type": "win",
-                    "is_claim": True,
-                    "reward": 0.0,
-                    "gameover": True
-                })
-                return False, True
-            elif add_kong_claim:
-                print(f"Kong is called by Player {self.players[temp_number].player_id}")
-                for _ in range(3):
-                    self.players[temp_number].hidden_hand.remove(self.latest_tile)
-
-                self.players[temp_number].revealed_sets.append([self.latest_tile,
-                                                                self.latest_tile,
-                                                                self.latest_tile,
-                                                                self.latest_tile])
-
-                self.log.append({
-                    "player_id": self.current_player.player_id,
-                    "state": state,
-                    "action_type": "kong",
-                    "is_claim": True,
-                    "reward": 0.0,
-                    "gameover": False
-                })
-
-                self.next_turn(temp_number)
-                return False, False
-            elif pong_claim:
-
-                print(f"Pong is called by Player {self.players[temp_number].player_id}")
-
-                for _ in range(2):
-                    self.players[temp_number].hidden_hand.remove(self.latest_tile)
-                self.players[temp_number].revealed_sets.append([self.latest_tile,
-                                                                self.latest_tile,
-                                                                self.latest_tile])
-
-                # print(self.players[temp_number].player_id)
-                self.log.append({
-                    "player_id": self.current_player.player_id,
-                    "state": state,
-                    "action_type": "pong",
-                    "is_claim": True,
-                    "reward": 0.0,
-                    "gameover": False
-                })
-                self.discard_tile(self.players[temp_number])
-                self.next_turn(temp_number)
-
-                return False, True
-            temp_number = (temp_number + 1) % 4
-        return True, False
-
     def play_round(self) -> Player | None:
         """
         Play one round of a MahjongGame to the end until a draw or win. Return
@@ -193,11 +123,12 @@ class MahjongGame:
         self.winner = None
         self.game_over = False
         print("GAME START")
+
         while not self.game_over and len(self.tiles) != 0:
             self.play_turn()
             if self.game_over:
                 break
-            self.next_turn()
+
 
         if len(self.tiles) == 0:
             print("==================")
@@ -276,62 +207,111 @@ class MahjongGame:
 
     def play_turn(self):
         """
-        Play one turn of a Mahjong round.
+        1. Discard tile
+        2. Check if anyone wants to make actions
+        3. Sort all actions
+        4. Execute action
+        5. End turn
         :return:
         """
         state = self.get_state()
-        check_sheung, action_taken = self.check_interrupt(state)
-        if not action_taken and check_sheung and self.latest_tile is not None:  # kong takes latest tile
-            sheung = self.current_player.decide_sheung(self.latest_tile, state)
-            if sheung is not None:
-                print(f"Sheung is called by Player {self.current_player.player_id}")
-                sheung_tiles = [self.current_player.hidden_hand[sheung[0]],
-                                self.current_player.hidden_hand[sheung[1]]
-                                ]
-                bisect.insort(sheung_tiles, self.latest_tile)
-                self.current_player.revealed_sets.append(sheung_tiles)
-                self.current_player.hidden_hand.pop(sheung[0])
-                self.current_player.hidden_hand.pop(sheung[1] - 1)
+        self.discard_tile(self.current_player, state)
+        action_queue = []
+        for i in range(0, 4):
+            if i == self.current_player_no:
+                continue
+            player = self.players[i]
+            queued_action = player.prepare_action(self.latest_tile, self.circle_wind, self.current_player_no)
+            if queued_action is not None:
+                action_queue.append(queued_action)
+
+        actioning_player_id, action_to_execute = self.resolve_actions(action_queue)
+        if actioning_player_id is not None:
+            actioning_player = self.players[actioning_player_id]
+            if action_to_execute == "win":
+                self.game_over = True
+                self.winner = actioning_player
                 self.log.append({
-                    "player_id": self.current_player.player_id,
+                    "player_id": actioning_player.player_id,
                     "state": state,
-                    "action_type": "sheung",
+                    "action_type": "win",
+                    "is_claim": True,
+                    "reward": 0.0,
+                    "gameover": True
+                })
+                return
+            elif action_to_execute == "kong":
+                print(f"Kong is called by Player {actioning_player}")
+                for _ in range(0, 3):
+                    actioning_player.hidden_hand.remove(self.latest_tile)
+                actioning_player.revealed_sets.append([self.latest_tile] * 4)
+                self.log.append({
+                    "player_id": actioning_player.player_id,
+                    "state": state,
+                    "action_type": "kong",
                     "is_claim": True,
                     "reward": 0.0,
                     "gameover": False
                 })
-                self.discard_tile(self.current_player, state)
-
-            else:
-                if self.draw_tile(self.current_player) is None:
-                    return
-                self.discard_tile(self.current_player, state)
+                self.current_player_no = actioning_player.player_order
+                self.current_player = actioning_player
+                self.draw_tile(actioning_player)
+                return
+            elif action_to_execute == "pong":
+                print(f"Pong is called by Player {actioning_player_id}")
+                for _ in range(2):
+                    actioning_player.hidden_hand.remove(self.latest_tile)
+                actioning_player.revealed_sets.append([self.latest_tile] * 3)
                 self.log.append({
-                    "player_id": self.current_player.player_id,
+                    "player_id": actioning_player.player_id,
                     "state": state,
-                    "action_type": "discard",
-                    "is_claim": False,
+                    "action_type": "pong",
+                    "is_claim": True,
                     "reward": 0.0,
                     "gameover": False
                 })
-        elif not action_taken:
-            if self.game_over:
+                self.current_player_no = (actioning_player.player_order - 1) % 4
+                self.current_player = self.players[self.current_player_no]
                 return
-            if not action_taken and self.draw_tile(self.current_player) is None:
-                return
-            self.discard_tile(self.current_player, state)
-            self.log.append({
-                "player_id": self.current_player.player_id,
-                "state": state,
-                "action_type": "discard",
-                "is_claim": False,
-                "reward": 0.0,
-                "gameover": False
-            })
+            elif action_to_execute == "sheung":
+                print(f"Sheung is called by Player {actioning_player_id}")
+                indices = actioning_player.decide_sheung(self.latest_tile, state)
+                i1, i2 = sorted(indices, reverse=True)
+
+                sheung_tile_1 = self.current_player.hidden_hand.pop(i1)
+                sheung_tile_2 = self.current_player.hidden_hand.pop(i2)
+
+
+                if indices is not None:
+                    sheung_tiles = [sheung_tile_1,
+                                    sheung_tile_2,
+                                    self.latest_tile]
+                    actioning_player.revealed_sets.append(sheung_tiles)
+                    actioning_player.hidden_hand.pop(indices[1])
+                    actioning_player.hidden_hand.pop(indices[0])
+                    self.log.append({
+                        "player_id": actioning_player.player_id,
+                        "state": state,
+                        "action_type": "sheung",
+                        "is_claim": True,
+                        "reward": 0.0,
+                        "gameover": False
+                    })
+                    self.current_player_no = (actioning_player.player_order - 1) % 4
+                    self.current_player = self.players[self.current_player_no]
+                    return
+
         for player in self.players:
             if len(player.hidden_hand) % 3 != 1 and not self.game_over:
                 player.print_hand()
-                raise ValueError
+                raise ValueError("The players do not have the right number of tiles in hand")
+
+        if not self.game_over:
+            self.next_turn()
+            self.draw_tile(self.current_player)
+
+
+
 
     def discard_tile(self, player: Player, state: np.ndarray = None):
         """
@@ -448,14 +428,11 @@ class MahjongGame:
                     scores[discard_player] = -256
                     return scores
 
-    def run_concurrent_game(self, players: List[Player]) -> List[int]:
-        """
-        .
-        """
-        score = []
-        is_draw = True
-        while players[0] is self.winner or is_draw:
-            winner = self.play_round()
+
+
+
+
+
 
     # STATE ===========================================================================
 
@@ -561,3 +538,73 @@ class MahjongGame:
         :return:
         """
         return winloss * score
+
+
+        # LEGACY PLAY TURN
+
+        # check_sheung, action_taken = self.check_interrupt(state)
+        # if not action_taken and check_sheung and self.latest_tile is not None:  # kong takes latest tile
+        #     sheung = self.current_player.decide_sheung(self.latest_tile, state)
+        #     if sheung is not None:
+        #         print(f"Sheung is called by Player {self.current_player.player_id}")
+        #         sheung_tiles = [self.current_player.hidden_hand[sheung[0]],
+        #                         self.current_player.hidden_hand[sheung[1]]
+        #                         ]
+        #         bisect.insort(sheung_tiles, self.latest_tile)
+        #         self.current_player.revealed_sets.append(sheung_tiles)
+        #         self.current_player.hidden_hand.pop(sheung[0])
+        #         self.current_player.hidden_hand.pop(sheung[1] - 1)
+        #         self.log.append({
+        #             "player_id": self.current_player.player_id,
+        #             "state": state,
+        #             "action_type": "sheung",
+        #             "is_claim": True,
+        #             "reward": 0.0,
+        #             "gameover": False
+        #         })
+        #         self.discard_tile(self.current_player, state)
+        #
+        #     else:
+        #         if self.draw_tile(self.current_player) is None:
+        #             return
+        #         self.discard_tile(self.current_player, state)
+        #         self.log.append({
+        #             "player_id": self.current_player.player_id,
+        #             "state": state,
+        #             "action_type": "discard",
+        #             "is_claim": False,
+        #             "reward": 0.0,
+        #             "gameover": False
+        #         })
+        # elif not action_taken:
+        #     if self.game_over:
+        #         return
+        #     if not action_taken and self.draw_tile(self.current_player) is None:
+        #         return
+        #     self.discard_tile(self.current_player, state)
+        #     self.log.append({
+        #         "player_id": self.current_player.player_id,
+        #         "state": state,
+        #         "action_type": "discard",
+        #         "is_claim": False,
+        #         "reward": 0.0,
+        #         "gameover": False
+        #     })
+
+    def resolve_actions(self, actions: List[Tuple]) -> Tuple:
+        if not actions:
+            return None, None
+        def sort_actions(item):
+            player_id, action = item
+            distance = (self.current_player_no - player_id) % 4
+            if action == "win":
+                return 4, -distance
+            if action == "kong":
+                return 3, -distance
+            if action == "pong":
+                return 2, -distance
+            if action == "sheung":
+                return 1, -distance
+            raise ValueError("Invalid action")
+        actions.sort(key=sort_actions, reverse=True)
+        return actions[0]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import bisect
 import copy
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -565,3 +565,14 @@ class Player:
 
     def get_hand_length(self):
         return len(self.hidden_hand)
+
+    def prepare_action(self, discarded_tile, circle_wind, player_number) -> Optional[Tuple[int,str]]:
+        if self.decide_win(discarded_tile, circle_wind, player_number):
+            return self.player_id, "win"
+        if self.decide_add_kong(discarded_tile):
+            return self.player_id, "kong"
+        if self.decide_pong(discarded_tile):
+            return self.player_id, "pong"
+        if self.decide_sheung(discarded_tile):
+            return self.player_id, "sheung"
+        return None
