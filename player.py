@@ -573,6 +573,6 @@ class Player:
             return self.player_id, "kong"
         if self.decide_pong(discarded_tile):
             return self.player_id, "pong"
-        if self.decide_sheung(discarded_tile):
+        if self.decide_sheung(discarded_tile) and player_number == (self.player_id - 1) % 4:
             return self.player_id, "sheung"
         return None

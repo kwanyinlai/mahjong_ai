@@ -169,6 +169,10 @@ class MahjongGame:
             drawn_tile = self.tiles.pop()
             print(f"Player {player.player_id} has redrawn a flower to {drawn_tile}")
 
+        if drawn_tile.tiletype == "flower":
+            player.flowers.append(drawn_tile)
+            return # if we run out of tiles but was on a flower
+
         if player.decide_win(drawn_tile, self.circle_wind, self.current_player_no, state):
             self.game_over = True
             self.winner = player
@@ -227,7 +231,10 @@ class MahjongGame:
 
         actioning_player_id, action_to_execute = self.resolve_actions(action_queue)
         if actioning_player_id is not None:
-            actioning_player = self.players[actioning_player_id]
+            for player in self.players:
+                if player.player_id == actioning_player_id:
+                    actioning_player = player
+                    break
             if action_to_execute == "win":
                 self.game_over = True
                 self.winner = actioning_player
@@ -270,7 +277,7 @@ class MahjongGame:
                     "reward": 0.0,
                     "gameover": False
                 })
-                self.current_player_no = (actioning_player.player_order - 1) % 4
+                self.current_player_no = actioning_player.player_order
                 self.current_player = self.players[self.current_player_no]
                 return
             elif action_to_execute == "sheung":
@@ -278,28 +285,21 @@ class MahjongGame:
                 indices = actioning_player.decide_sheung(self.latest_tile, state)
                 i1, i2 = sorted(indices, reverse=True)
 
-                sheung_tile_1 = self.current_player.hidden_hand.pop(i1)
-                sheung_tile_2 = self.current_player.hidden_hand.pop(i2)
+                sheung_tile_1 = actioning_player.hidden_hand.pop(i1)
+                sheung_tile_2 = actioning_player.hidden_hand.pop(i2)
 
-
-                if indices is not None:
-                    sheung_tiles = [sheung_tile_1,
-                                    sheung_tile_2,
-                                    self.latest_tile]
-                    actioning_player.revealed_sets.append(sheung_tiles)
-                    actioning_player.hidden_hand.pop(indices[1])
-                    actioning_player.hidden_hand.pop(indices[0])
-                    self.log.append({
-                        "player_id": actioning_player.player_id,
-                        "state": state,
-                        "action_type": "sheung",
-                        "is_claim": True,
-                        "reward": 0.0,
-                        "gameover": False
-                    })
-                    self.current_player_no = (actioning_player.player_order - 1) % 4
-                    self.current_player = self.players[self.current_player_no]
-                    return
+                actioning_player.revealed_sets.append([sheung_tile_1, sheung_tile_2, self.latest_tile])
+                self.log.append({
+                    "player_id": actioning_player.player_id,
+                    "state": state,
+                    "action_type": "sheung",
+                    "is_claim": True,
+                    "reward": 0.0,
+                    "gameover": False
+                })
+                self.current_player_no = actioning_player.player_order
+                self.current_player = self.players[self.current_player_no]
+                return
 
         for player in self.players:
             if len(player.hidden_hand) % 3 != 1 and not self.game_over:
