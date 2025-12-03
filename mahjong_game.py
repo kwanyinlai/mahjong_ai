@@ -125,7 +125,18 @@ class MahjongGame:
         print("GAME START")
 
         while not self.game_over and len(self.tiles) != 0:
-            self.play_turn()
+            actioning_player_id, action_to_execute = self.play_turn()
+            is_interrupted = self.execute_interrupt(actioning_player_id, action_to_execute)
+            if not is_interrupted:
+                for player in self.players:
+                    if len(player.hidden_hand) % 3 != 1 and not self.game_over:
+                        player.print_hand()
+                        raise ValueError("The players do not have the right number of tiles in hand")
+
+                if not self.game_over:
+                    self.next_turn()
+                    self.draw_tile(self.current_player)
+
             if self.game_over:
                 break
 
@@ -156,6 +167,7 @@ class MahjongGame:
             for i in range(4):
                 self.players[i].score += scores[i]
             return self.winner
+
 
     def draw_tile(self, player: Player) -> MahjongTile:
         """
@@ -209,13 +221,12 @@ class MahjongGame:
         # print(drawn_tile)
         return drawn_tile
 
-    def play_turn(self):
+    def play_turn(self) -> tuple:
         """
         1. Discard tile
         2. Check if anyone wants to make actions
         3. Sort all actions
-        4. Execute action
-        5. End turn
+        4. Return action
         :return:
         """
         state = self.get_state()
@@ -229,7 +240,13 @@ class MahjongGame:
             if queued_action is not None:
                 action_queue.append(queued_action)
 
-        actioning_player_id, action_to_execute = self.resolve_actions(action_queue)
+        return self.resolve_actions(action_queue)
+
+
+    def execute_interrupt(self, actioning_player_id, action_to_execute) -> bool:
+        """
+        Return True if a tile draw is still needed
+        """
         if actioning_player_id is not None:
             for player in self.players:
                 if player.player_id == actioning_player_id:
@@ -246,7 +263,7 @@ class MahjongGame:
                     "reward": 0.0,
                     "gameover": True
                 })
-                return
+                return True
             elif action_to_execute == "kong":
                 print(f"Kong is called by Player {actioning_player}")
                 for _ in range(0, 3):
@@ -263,7 +280,7 @@ class MahjongGame:
                 self.current_player_no = actioning_player.player_order
                 self.current_player = actioning_player
                 self.draw_tile(actioning_player)
-                return
+                return True
             elif action_to_execute == "pong":
                 print(f"Pong is called by Player {actioning_player_id}")
                 for _ in range(2):
@@ -279,7 +296,7 @@ class MahjongGame:
                 })
                 self.current_player_no = actioning_player.player_order
                 self.current_player = self.players[self.current_player_no]
-                return
+                return True
             elif action_to_execute == "sheung":
                 print(f"Sheung is called by Player {actioning_player_id}")
                 indices = actioning_player.decide_sheung(self.latest_tile, state)
@@ -299,25 +316,29 @@ class MahjongGame:
                 })
                 self.current_player_no = actioning_player.player_order
                 self.current_player = self.players[self.current_player_no]
-                return
+                return True
+        return False
 
-        for player in self.players:
-            if len(player.hidden_hand) % 3 != 1 and not self.game_over:
-                player.print_hand()
-                raise ValueError("The players do not have the right number of tiles in hand")
-
-        if not self.game_over:
-            self.next_turn()
-            self.draw_tile(self.current_player)
-
-
-
-
-    def discard_tile(self, player: Player, state: np.ndarray = None):
+    def discard_tile(self, player: Player, state: np.ndarray = None, tile = None):
         """
         Add the latest tile to the discarded pile and set the latest discarded tile
         to this
         """
+        if tile is not None:
+            self.discarded_tiles.append(tile)
+            self.discarding_player = player
+            print(f"Player {player.player_id} discarded {tile}")
+            player.hidden_hand.remove(tile)
+            player.discard_pile.append(tile)
+            self.log.append({
+                "player_id": self.current_player.player_id,
+                "state": state,
+                "action_type": "discard",
+                "is_claim": True,
+                "reward": 0.0,
+                "gameover": False
+            })
+            return
 
         discarded_tile = player.discard_tile(state)
         self.latest_tile = discarded_tile
