@@ -38,6 +38,9 @@ class Policy:
         """
         raise NotImplementedError
 
+    def select_sheung(self, state):
+        raise NotImplementedError
+
 
 class SimplePolicy(Policy):
     def select_discard(self, state: np.ndarray, hidden_hand: List[MahjongTile]) -> MahjongTile:
@@ -68,3 +71,6 @@ class SimplePolicy(Policy):
         :param state:
         """
         return True
+
+    def select_sheung(self, state):
+        return None

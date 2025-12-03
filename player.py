@@ -566,13 +566,13 @@ class Player:
     def get_hand_length(self):
         return len(self.hidden_hand)
 
-    def prepare_action(self, discarded_tile, circle_wind, player_number) -> Optional[Tuple[int,str]]:
+    def prepare_action(self, discarded_tile, circle_wind, player_number) -> Tuple:
         if self.decide_win(discarded_tile, circle_wind, player_number):
-            return self.player_id, "win"
+            return self.player_id, "win", None
         if self.decide_add_kong(discarded_tile):
-            return self.player_id, "kong"
+            return self.player_id, "kong", None
         if self.decide_pong(discarded_tile):
-            return self.player_id, "pong"
-        if self.decide_sheung(discarded_tile) and player_number == (self.player_id - 1) % 4:
-            return self.player_id, "sheung"
-        return None
+            return self.player_id, "pong", None
+        if (sheung_indices := self.decide_sheung(discarded_tile)) and player_number == (self.player_id - 1) % 4:
+            return self.player_id, "sheung", sheung_indices
+        return None, None, None

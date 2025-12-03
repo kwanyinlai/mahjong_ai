@@ -81,7 +81,7 @@ class MahjongGame:
         current_player_number = 0
         while len(self.players[0].hidden_hand) < 14:
             self.players[current_player_number].add_tile(self.tiles.pop())
-            print(f"CURR: {len(self.players[current_player_number].hidden_hand)}")
+            # print(f"CURR: {len(self.players[current_player_number].hidden_hand)}")
             current_player_number += 1
             current_player_number %= 4
 
@@ -125,8 +125,8 @@ class MahjongGame:
         print("GAME START")
 
         while not self.game_over and len(self.tiles) != 0:
-            actioning_player_id, action_to_execute = self.play_turn()
-            is_interrupted = self.execute_interrupt(actioning_player_id, action_to_execute)
+            actioning_player_id, action_to_execute, possible_indices = self.play_turn()
+            is_interrupted = self.execute_interrupt(actioning_player_id, action_to_execute, possible_indices)
             if not is_interrupted:
                 for player in self.players:
                     if len(player.hidden_hand) % 3 != 1 and not self.game_over:
@@ -139,7 +139,6 @@ class MahjongGame:
 
             if self.game_over:
                 break
-
 
         if len(self.tiles) == 0:
             print("==================")
@@ -168,7 +167,6 @@ class MahjongGame:
                 self.players[i].score += scores[i]
             return self.winner
 
-
     def draw_tile(self, player: Player) -> MahjongTile:
         """
         Add a tile to the player's hands and return
@@ -183,9 +181,10 @@ class MahjongGame:
 
         if drawn_tile.tiletype == "flower":
             player.flowers.append(drawn_tile)
-            return # if we run out of tiles but was on a flower
+            return  # if we run out of tiles but was on a flower
 
-        if player.decide_win(drawn_tile, self.circle_wind, self.current_player_no, state):
+        if (player.decide_win(drawn_tile, self.circle_wind, self.current_player_no, state)
+                and Player.decide_win(player, drawn_tile, self.circle_wind, self.current_player_no, state)):
             self.game_over = True
             self.winner = player
             print(f"Player {player.player_id} has claimed a win")
@@ -202,7 +201,7 @@ class MahjongGame:
             return None
         latest_tile, self.latest_tile = self.latest_tile, drawn_tile
         state = self.get_state()
-        while player.decide_add_kong(drawn_tile, state) and len(self.tiles) > 0:
+        while Player.decide_add_kong(player, drawn_tile, state) and player.decide_add_kong(drawn_tile, state) and len(self.tiles) > 0:
             for _ in range(3):
                 self.players[self.current_player_no].hidden_hand.remove(drawn_tile)
 
@@ -242,12 +241,13 @@ class MahjongGame:
 
         return self.resolve_actions(action_queue)
 
-
-    def execute_interrupt(self, actioning_player_id, action_to_execute) -> bool:
+    def execute_interrupt(self, actioning_player_id, action_to_execute, possible_indices) -> bool:
         """
         Return True if a tile draw is still needed
         """
         if actioning_player_id is not None:
+            state = self.get_state()
+            actioning_player = self.players[actioning_player_id]
             for player in self.players:
                 if player.player_id == actioning_player_id:
                     actioning_player = player
@@ -299,7 +299,7 @@ class MahjongGame:
                 return True
             elif action_to_execute == "sheung":
                 print(f"Sheung is called by Player {actioning_player_id}")
-                indices = actioning_player.decide_sheung(self.latest_tile, state)
+                indices = possible_indices
                 i1, i2 = sorted(indices, reverse=True)
 
                 sheung_tile_1 = actioning_player.hidden_hand.pop(i1)
@@ -319,7 +319,7 @@ class MahjongGame:
                 return True
         return False
 
-    def discard_tile(self, player: Player, state: np.ndarray = None, tile = None):
+    def discard_tile(self, player: Player, state: np.ndarray = None, tile=None):
         """
         Add the latest tile to the discarded pile and set the latest discarded tile
         to this
@@ -330,6 +330,7 @@ class MahjongGame:
             print(f"Player {player.player_id} discarded {tile}")
             player.hidden_hand.remove(tile)
             player.discard_pile.append(tile)
+            self.latest_tile = tile
             self.log.append({
                 "player_id": self.current_player.player_id,
                 "state": state,
@@ -449,12 +450,6 @@ class MahjongGame:
                     scores[discard_player] = -256
                     return scores
 
-
-
-
-
-
-
     # STATE ===========================================================================
 
     def get_player_state(self, player: Player) -> np.ndarray:
@@ -560,7 +555,6 @@ class MahjongGame:
         """
         return winloss * score
 
-
         # LEGACY PLAY TURN
 
         # check_sheung, action_taken = self.check_interrupt(state)
@@ -614,9 +608,13 @@ class MahjongGame:
 
     def resolve_actions(self, actions: List[Tuple]) -> Tuple:
         if not actions:
-            return None, None
+            return None, None, None
+
         def sort_actions(item):
-            player_id, action = item
+            player_id, action, indices = item
+
+            if player_id is None:
+                return -100, -100
             distance = (self.current_player_no - player_id) % 4
             if action == "win":
                 return 4, -distance
@@ -624,8 +622,30 @@ class MahjongGame:
                 return 3, -distance
             if action == "pong":
                 return 2, -distance
-            if action == "sheung":
+            if action in {"lower sheung", "middle sheung", "upper sheung", "sheung"}:
                 return 1, -distance
             raise ValueError("Invalid action")
+
         actions.sort(key=sort_actions, reverse=True)
         return actions[0]
+
+    def validate_actions(self, player: Player, action) -> bool:
+        """
+        Check whether the move is valid
+        :param player:
+        :param action:
+        :return:
+        """
+        if action == "win":
+            return Player.decide_win(player, self.latest_tile, self.circle_wind, self.current_player_no)
+        elif action == "pong":
+            return Player.decide_pong(player, self.latest_tile)
+        elif action == "kong":
+            return Player.decide_add_kong(player, self.latest_tile)
+        elif action == "lower sheung":
+            return Player.show_all_possible_sheungs(player, self.latest_tile)[0] is not None
+        elif action == "middle sheung":
+            return Player.show_all_possible_sheungs(player, self.latest_tile)[1] is not None
+        elif action == "upper sheung":
+            return Player.show_all_possible_sheungs(player, self.latest_tile)[2] is not None
+        return False

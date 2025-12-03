@@ -1,11 +1,14 @@
-import gym
-from gym import spaces
+from typing import Optional, Tuple
+
+import gymnasium
+from gymnasium import spaces
 import numpy as np
 from mahjong_game import MahjongGame
 from rl_bot import RLAgent
+from tile import MahjongTile
 
 
-class MahjongEnviornmentAdapter(gym.Env):
+class MahjongEnvironmentAdapter(gymnasium.Env):
     """
     .
     """
@@ -17,12 +20,14 @@ class MahjongEnviornmentAdapter(gym.Env):
         self.game = MahjongGame(players, circle_wind)
         self.controlling_player_id = controlling_player_id
 
-        self.action_space = spaces.Discrete(18)
+        self.action_space = spaces.Discrete(20)
         # 0 - 13: discard tiles 0 to 13
         # 14 claim win
         # 15 claim kong
         # 16 claim pong
-        # 17 claim sheung
+        # 17 claim lower sheung
+        # 18 claim middle sheung
+        # 19 claim upward sheung
 
         self.observation_space = spaces.Box(
             low=0.0,
@@ -39,7 +44,7 @@ class MahjongEnviornmentAdapter(gym.Env):
         state = self.game.get_state()
         return np.array(state, dtype=np.float32)
 
-    def reset(self):
+    def reset(self) -> np.ndarray:
         """
         Reset the game state
         :return:
@@ -62,41 +67,88 @@ class MahjongEnviornmentAdapter(gym.Env):
                 tile_to_discard = rl_player.hidden_hand[action]
                 self.game.discard_tile(rl_player, self.game.get_state(), tile=tile_to_discard)
             else:
-                action_str = self._map_int_to_action(action)
-                self.game.execute_interrupt(self.controlling_player_id, action_str)
-                if action_str == "win":
-                    reward = 1.0
-                    self.game.game_over = True
-                elif action_str in ["pong", "kong"]:
-                    reward = 0.1
-                elif action_str == "sheung":
-                    reward = -0.1
+                # invalid action can only discard while it's your turn
+                reward -= 1
+                obs = self.get_observation()
+                return obs, reward, self.game.game_over, info
 
-            if not self.game.game_over:
-                self.game.next_turn()
-                self.game.draw_tile(self.game.current_player)
+            # consider interrupts
+            action_queue = []
+            for i in range(0, 4):
+                if i == rl_player.player_id:
+                    continue
+                else:
+                    player = self.game.players[i]
+                    queued_action = player.prepare_action(self.game.latest_tile,
+                                                          self.game.circle_wind,
+                                                          self.game.current_player_no)
+                    if queued_action is not None:
+                        action_queue.append(queued_action)
+            actioning_player_id, action_to_execute, possible_indices = self.game.resolve_actions(action_queue)
 
-            obs = self.get_observation()
-            return obs, reward, self.game.game_over, info
-
-        else:
-            actioning_player_id, suggested_action = self.game.play_turn()
-            if actioning_player_id is not None and actioning_player_id != self.controlling_player_id:
-                self.game.execute_interrupt(actioning_player_id, suggested_action)
-
-            if self.game.current_player == rl_player or self.game.game_over:
+            is_interrupted = self.game.execute_interrupt(actioning_player_id, action_to_execute, possible_indices)
+            if not is_interrupted:
+                # sanity check
+                for player in self.game.players:
+                    if len(player.hidden_hand) % 3 != 1 and not self.game.game_over:
+                        player.print_hand()
+                        raise ValueError("The players do not have the right number of tiles in hand")
+            else:
                 obs = self.get_observation()
                 done = self.game.game_over
                 return obs, reward, done, info
 
-            if actioning_player_id is None:
-                self.game.next_turn()
-                self.game.draw_tile(self.game.current_player)
+        else:
+            ## other players discard ##
 
+            state = self.game.get_state()
+            self.game.discard_tile(self.game.current_player, state)
+
+            action_queue = []
+            for i in range(0, 4):
+                if i == self.game.current_player_no:
+                    continue
+                elif i == self.controlling_player_id:
+                    action_is_valid = self.game.validate_actions(rl_player, action)
+                    if not action_is_valid:
+                        reward -= 1.0
+                        action_str = None
+                        print("INVALID ACTION")
+                        print(action)
+                        print(rl_player.player_id)
+                    else:
+                        action_str, possible_indices = self._map_int_to_action(rl_player, action)
+                    if action_str is not None:
+                        action_queue.append(
+                            (
+                                self.controlling_player_id, action_str, possible_indices
+                            )
+                        )
+                else:
+                    player = self.game.players[i]
+                    queued_action = player.prepare_action(self.game.latest_tile,
+                                                          self.game.circle_wind,
+                                                          self.game.current_player_no)
+                    if queued_action is not None:
+                        action_queue.append(queued_action)
+            actioning_player_id, action_to_execute, possible_indices = self.game.resolve_actions(action_queue)
+            is_interrupted = self.game.execute_interrupt(actioning_player_id, action_to_execute, possible_indices)
+            if not is_interrupted:
+                for player in self.game.players:
+                    if len(player.hidden_hand) % 3 != 1 and not self.game.game_over:
+                        player.print_hand()
+                        raise ValueError("The players do not have the right number of tiles in hand")
+            else:
+                obs = self.get_observation()
+                done = self.game.game_over
+                return obs, reward, done, info
+
+        if not self.game.game_over:
+            self.game.next_turn()
+            self.game.draw_tile(self.game.current_player)
         obs = self.get_observation()
         done = self.game.game_over
         return obs, reward, done, info
-
 
     def render(self, mode='human'):
         raise NotImplementedError
@@ -105,14 +157,33 @@ class MahjongEnviornmentAdapter(gym.Env):
     def close(self):
         pass
 
-    def _map_int_to_action(self, action) -> str:
+    def _map_int_to_action(self, player, action) -> Tuple[str, Optional[Tuple]]:
         match action:
             case 14:
-                return "win"
+                return "win", None
             case 15:
-                return "kong"
+                return "kong", None
             case 16:
-                return "pong"
+                return "pong", None
             case 17:
-                return "sheung"
+                current_tile = self.game.latest_tile
+                tile1 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar - 2)
+                tile2 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar - 1)
+                tile1_ind = player.hidden_hand.index(tile1)
+                tile2_ind = player.hidden_hand.index(tile2)
+                return "lower sheung", (tile1_ind, tile2_ind)
+            case 18:
+                current_tile = self.game.latest_tile
+                tile1 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar - 1)
+                tile2 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar + 1)
+                tile1_ind = player.hidden_hand.index(tile1)
+                tile2_ind = player.hidden_hand.index(tile2)
+                return "middle sheung", (tile1_ind, tile2_ind)
+            case 19:
+                current_tile = self.game.latest_tile
+                tile1 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar + 1)
+                tile2 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar + 2)
+                tile1_ind = player.hidden_hand.index(tile1)
+                tile2_ind = player.hidden_hand.index(tile2)
+                return "upper sheung", (tile1_ind, tile2_ind)
         raise ValueError("Invalid action type")
