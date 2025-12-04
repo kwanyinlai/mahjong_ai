@@ -102,7 +102,7 @@ class MahjongGame:
         Shuffle tiles and deal them to players
         """
         # print("SETUP")
-
+        self.tiles = MahjongGame.initialize_tiles()
         random.shuffle(self.tiles)
         self.initialise_player_hands()
         self.current_player_no = 0
@@ -606,7 +606,7 @@ class MahjongGame:
             return Player.show_all_possible_sheungs(player, self.latest_tile)[2] is not None
         return False
 
-    def get_legal_actions(self, discard_turn: bool, player: Player) -> List[int]:
+    def get_legal_actions(self, discard_turn: bool, our_turn: bool, player: Player) -> List[int]:
         """
         Return a list of legal actions a player can make at any given moment
         :param discard_turn: whether it is the player's turn to act or if they
@@ -617,9 +617,11 @@ class MahjongGame:
         """
         legal_actions = []
 
-        if discard_turn:
+        if discard_turn and our_turn:
             # player can only discard
             legal_actions.extend(range(len(player.hidden_hand)))
+        elif discard_turn or (not our_turn and not discard_turn):
+            legal_actions = [MahjongActions.PASS]
         else:
             # a player can only respond to the move, or pass
             action_map = {
