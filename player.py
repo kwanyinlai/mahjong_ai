@@ -1,3 +1,7 @@
+"""
+player.py - represents a player in a MahjongGame
+"""
+
 from __future__ import annotations
 
 import bisect
@@ -11,7 +15,7 @@ from tile import MahjongTile
 
 class Player:
     """
-    Represents a player in a MahjongGame
+    Class which is compatible with MahjongGame in mahjong_game.py
     """
     player_id: int
     hidden_hand: List[MahjongTile]  # assume sorted
@@ -44,31 +48,11 @@ class Player:
         self.discard_pile = []
         self.highest_fan = 0
 
-    def check_claims(self, circle_wind: str, player_number: int, latest_tile: MahjongTile = None,
-                     state: np.ndarray = None) -> Tuple[bool, bool, bool]:
-        """
-        WIN_CLAIM
-        PONG
-        ADD_KONG
-        SHEUNG
-        DISCARD
-        """
-
-        if not latest_tile:
-            return False, False, False
-        if self.decide_win(latest_tile, circle_wind, state):
-            return True, False, False
-        if latest_tile is not None:
-            if self.decide_pong(latest_tile, state):
-                return False, True, False
-            elif self.decide_add_kong(latest_tile, state):
-                return False, False, True
-        return False, False, False
-
     def _set_hand(self) -> None:
         """
         Set the hand for a player to a specified set
         !!!! FOR TESTING PURPOSES ONLY !!!!
+        SHOULD NOT BE USED IN REAL SITUATIONS
         """
         tile1 = MahjongTile(tiletype="suit", subtype="circle", numchar=1)
         tile2 = MahjongTile(tiletype="suit", subtype="circle", numchar=2)
@@ -86,6 +70,9 @@ class Player:
         """
         Check and return whether the player currently has a winning hand
         with sufficient 'faan' score
+        :param circle_wind: the current circle wind in {"north", "east",
+                            "south", "west"}
+        :return: return True if we have a winning hand, otherwise False
         """
 
         if self.check_thirteen_orphans():
@@ -121,10 +108,17 @@ class Player:
                 return True
         return False
 
+    def check_thirteen_orphans(self):
+        """
+        Edge case of thirteen orphans to be checked with winning hand
+        """
+        pair_exists = any(self.hidden_hand[i] == self.hidden_hand[i + 1] for i in range(len(self.hidden_hand) - 1))
+        all_orphans = self.orphans <= {tile for tile in self.hidden_hand}
+        return len(self.hidden_hand) == 14 and pair_exists and all_orphans
+
     def _set_orphans(self):
         """
-        Set thirteen orphans
-        :return:
+        Set thirteen orphans attribute
         """
         tile1 = MahjongTile(tiletype="suit", subtype="circle", numchar=1)
         tile2 = MahjongTile(tiletype="suit", subtype="circle", numchar=9)
@@ -139,17 +133,9 @@ class Player:
         tile11 = MahjongTile(tiletype="honour", subtype="wind", numchar='east')
         tile12 = MahjongTile(tiletype="honour", subtype="wind", numchar='south')
         tile13 = MahjongTile(tiletype="honour", subtype="wind", numchar='west')
+        tile14 = MahjongTile(tiletype="honour", subtype="wind", numchar='west')
         self.orphans = {tile1, tile2, tile3, tile4, tile5, tile6, tile7, tile8, tile9, tile10,
                         tile11, tile12, tile13}
-
-    def check_thirteen_orphans(self):
-        """
-        Edge case of thirteen orphans to be checked with winning hand
-        """
-        pair_exists = any(self.hidden_hand[i] == self.hidden_hand[i+1] for i in range(len(self.hidden_hand)-1))
-        all_orphans = self.orphans <= {tile for tile in self.hidden_hand}
-
-        return len(self.hidden_hand) == 14 and pair_exists and all_orphans
 
     def can_fit_into_set(self, remaining_hand: List[MahjongTile], potential_hand: List[List[MahjongTile]]):
         """

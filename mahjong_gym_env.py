@@ -1,8 +1,14 @@
-from typing import Optional, Tuple
+"""
+mahjong_gym_env - wrapper class to adapt for the gymnasium environment
+"""
+
+from typing import Dict, Optional, Tuple
 
 import gymnasium
 from gymnasium import spaces
 import numpy as np
+
+from mahjong_actions import MahjongActions
 from mahjong_game import MahjongGame
 from rl_bot import RLAgent
 from tile import MahjongTile
@@ -10,7 +16,8 @@ from tile import MahjongTile
 
 class MahjongEnvironmentAdapter(gymnasium.Env):
     """
-    .
+    An adapter class for a Mahjong game which stores reference to the single
+    RL in the game
     """
     game: MahjongGame
     controlling_player_id: int
@@ -20,7 +27,7 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         self.game = MahjongGame(players, circle_wind)
         self.controlling_player_id = controlling_player_id
 
-        self.action_space = spaces.Discrete(20)
+        self.action_space = spaces.Discrete(21)
         # 0 - 13: discard tiles 0 to 13
         # 14 claim win
         # 15 claim kong
@@ -28,6 +35,8 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         # 17 claim lower sheung
         # 18 claim middle sheung
         # 19 claim upward sheung
+        # 20 for pass (no action)
+        # all of these corresponds to enum in MahjongActions (mahjong_actions.py)
 
         self.observation_space = spaces.Box(
             low=0.0,
@@ -36,7 +45,7 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
             dtype=np.float32
         )
 
-    def get_observation(self):
+    def get_observation(self) -> np.ndarray:
         """
         Return the state of the game
         :return:
@@ -52,27 +61,21 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         self.game.setup_game()
         return self.get_observation()
 
-    def step(self, action: int):
+    def step(self, action: int) -> Tuple[np.ndarray, float, bool, Dict]:
         """
-        A single step
+        Move the environment for a single step
         """
         rl_player = self.game.players[self.controlling_player_id]
         assert isinstance(rl_player, RLAgent)
+        # make sure our controlling player is actually an RL agent
 
         reward = 0.0
         info = {}
 
         if self.game.current_player == rl_player:
-            if action < len(rl_player.hidden_hand):
-                tile_to_discard = rl_player.hidden_hand[action]
-                self.game.discard_tile(rl_player, self.game.get_state(), tile=tile_to_discard)
-            else:
-                # invalid action can only discard while it's your turn
-                reward -= 1
-                obs = self.get_observation()
-                return obs, reward, self.game.game_over, info
-
-            # consider interrupts
+            tile_to_discard = rl_player.hidden_hand[action]
+            self.game.discard_tile(rl_player, self.game.get_state(), tile=tile_to_discard)
+            # consider interrupts by other players
             action_queue = []
             for i in range(0, 4):
                 if i == rl_player.player_id:
@@ -90,8 +93,9 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
             if not is_interrupted:
                 # sanity check
                 for player in self.game.players:
+                    player.print_hand()
                     if len(player.hidden_hand) % 3 != 1 and not self.game.game_over:
-                        player.print_hand()
+
                         raise ValueError("The players do not have the right number of tiles in hand")
             else:
                 obs = self.get_observation()
@@ -99,8 +103,8 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
                 return obs, reward, done, info
 
         else:
-            ## other players discard ##
-
+            # other players discard
+            # TODO: we are observing the state before discard
             state = self.game.get_state()
             self.game.discard_tile(self.game.current_player, state)
 
@@ -113,9 +117,7 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
                     if not action_is_valid:
                         reward -= 1.0
                         action_str = None
-                        print("INVALID ACTION")
-                        print(action)
-                        print(rl_player.player_id)
+                        raise RuntimeError("We should not be permitted to make invalid actions")
                     else:
                         action_str, possible_indices = self._map_int_to_action(rl_player, action)
                     if action_str is not None:
@@ -150,36 +152,32 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         done = self.game.game_over
         return obs, reward, done, info
 
-    def render(self, mode='human'):
-        raise NotImplementedError
-        # implement visuals
-
     def close(self):
         pass
 
     def _map_int_to_action(self, player, action) -> Tuple[str, Optional[Tuple]]:
         match action:
-            case 14:
+            case MahjongActions.WIN:
                 return "win", None
-            case 15:
+            case MahjongActions.ADD_KONG:
                 return "kong", None
-            case 16:
+            case MahjongActions.PONG:
                 return "pong", None
-            case 17:
+            case MahjongActions.LOWER_SHEUNG:
                 current_tile = self.game.latest_tile
                 tile1 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar - 2)
                 tile2 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar - 1)
                 tile1_ind = player.hidden_hand.index(tile1)
                 tile2_ind = player.hidden_hand.index(tile2)
                 return "lower sheung", (tile1_ind, tile2_ind)
-            case 18:
+            case MahjongActions.MIDDLE_SHEUNG:
                 current_tile = self.game.latest_tile
                 tile1 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar - 1)
                 tile2 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar + 1)
                 tile1_ind = player.hidden_hand.index(tile1)
                 tile2_ind = player.hidden_hand.index(tile2)
                 return "middle sheung", (tile1_ind, tile2_ind)
-            case 19:
+            case MahjongActions.UPPER_SHEUNG:
                 current_tile = self.game.latest_tile
                 tile1 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar + 1)
                 tile2 = MahjongTile(current_tile.tiletype, current_tile.subtype, current_tile.numchar + 2)

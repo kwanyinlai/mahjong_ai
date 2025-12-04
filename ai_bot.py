@@ -1,3 +1,12 @@
+"""
+ai_bot.py - benchmark bots that use simple heuristics to play Mahjong
+
+including:
+- RandomBot (randomly selects legal moves)
+- YesBot (always says yes when possible, otherwise randomly discards)
+- BasicBot (always says yes when possible, discards smartly using algorithm)
+"""
+
 from __future__ import annotations
 
 import math

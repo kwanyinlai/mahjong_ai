@@ -7,8 +7,8 @@ from typing import Dict, Union, List, Optional, Tuple
 
 import numpy as np
 
+from mahjong_actions import MahjongActions
 from player import Player
-from ai_bot import BasicBot, YesBot, RandomBot
 from tile import MahjongTile
 
 
@@ -111,9 +111,7 @@ class MahjongGame:
 
         # print("SETUP COMPLETE")
 
-    # GAMEPLAY ===========================================================================
-    # ====================================================================================
-    # ====================================================================================
+    # ============================= GAMEPLAY ========================================
 
     def play_round(self) -> Player | None:
         """
@@ -167,9 +165,12 @@ class MahjongGame:
                 self.players[i].score += scores[i]
             return self.winner
 
-    def draw_tile(self, player: Player) -> MahjongTile:
+    def draw_tile(self, player: Player) -> Optional[MahjongTile]:
         """
-        Add a tile to the player's hands and return
+        Draw a tile from the pile, redraw on any flowers, and
+        automatically claim add_kong or win. Return the drawn tile.
+        :param player: the player who is drawing
+        :return: the drawn tile
         """
         drawn_tile = self.tiles.pop()
         state = self.get_state()
@@ -181,7 +182,7 @@ class MahjongGame:
 
         if drawn_tile.tiletype == "flower":
             player.flowers.append(drawn_tile)
-            return  # if we run out of tiles but was on a flower
+            return None
 
         if (player.decide_win(drawn_tile, self.circle_wind, self.current_player_no, state)
                 and Player.decide_win(player, drawn_tile, self.circle_wind, self.current_player_no, state)):
@@ -199,9 +200,11 @@ class MahjongGame:
                 "gameover": True
             })
             return None
+
         latest_tile, self.latest_tile = self.latest_tile, drawn_tile
         state = self.get_state()
-        while Player.decide_add_kong(player, drawn_tile, state) and player.decide_add_kong(drawn_tile, state) and len(self.tiles) > 0:
+        while Player.decide_add_kong(player, drawn_tile, state) and player.decide_add_kong(drawn_tile, state) and len(
+                self.tiles) > 0:
             for _ in range(3):
                 self.players[self.current_player_no].hidden_hand.remove(drawn_tile)
 
@@ -220,13 +223,14 @@ class MahjongGame:
         # print(drawn_tile)
         return drawn_tile
 
-    def play_turn(self) -> tuple:
+    def play_turn(self) -> Tuple[Optional[int], Optional[str], Optional[List]]:
         """
-        1. Discard tile
-        2. Check if anyone wants to make actions
+        Execute actions in the turn in this order
+        1. Discard the tile for current player
+        2. Check if any other players want to respond to discard
         3. Sort all actions
-        4. Return action
-        :return:
+        4. Return action with the highest priority
+        :return: action with the highest priority, or None if no one wants to make actions
         """
         state = self.get_state()
         self.discard_tile(self.current_player, state)
@@ -241,9 +245,16 @@ class MahjongGame:
 
         return self.resolve_actions(action_queue)
 
-    def execute_interrupt(self, actioning_player_id, action_to_execute, possible_indices) -> bool:
+    def execute_interrupt(self, actioning_player_id: Optional[int], action_to_execute: Optional[str],
+                          possible_indices: Optional[List[int]]) -> bool:
         """
-        Return True if a tile draw is still needed
+        Execute the interrupt if the action is not None, and return whether any
+        action was executed.
+
+        :param actioning_player_id: the player who is interrupting, None if no interrupt
+        :param action_to_execute: the action they made, None if no action
+        :param possible_indices: indices for sheung only for reference not for comparison
+        :return: return True if we performed some computaiton, otherwise False
         """
         if actioning_player_id is not None:
             state = self.get_state()
@@ -322,7 +333,11 @@ class MahjongGame:
     def discard_tile(self, player: Player, state: np.ndarray = None, tile=None):
         """
         Add the latest tile to the discarded pile and set the latest discarded tile
-        to this
+        to the given tile. Update the game log as necessary.
+
+        :param player: the player who discarded the tile
+        :param state: the current game state
+        :param tile: the tile that was discarded
         """
         if tile is not None:
             self.discarded_tiles.append(tile)
@@ -360,10 +375,14 @@ class MahjongGame:
             player.print_hand()
             raise ValueError
 
-    def next_turn(self, player_skip: Optional[int] = None):
+    def next_turn(self, player_skip: int = None):
         """
+        Move the turn count to the next player, and update
+        current_player and current_player_no
 
-        :param player_skip:
+        :param player_skip: the player_id of the person to skip to,
+                            if unfilled, then move to the next player
+                            consecutively
         """
         if player_skip:
             self.current_player_no = player_skip
@@ -374,9 +393,15 @@ class MahjongGame:
 
     def convert_score(self, fan: int, discard_player: int, winning_player: int) -> List[int]:
         """
-        Return a list of ints representing the score gained or lost
-        by the player in the given position. If discard_player is
-        -1 then
+        Return a size-4 list of ints representing the score gained or lost
+        by the player in each given position correspdoning to game.players.
+
+        :param fan: the fan of the winning player
+        :param discard_player: the position of the player who discarded the last tile,
+                                if discard_player is -1, then the winning player won by
+                                self-draw
+        :param winning_player: the position of the winning player
+        :return: a list of scores to add to each player
         """
         if discard_player == winning_player:
             raise ValueError
@@ -450,12 +475,13 @@ class MahjongGame:
                     scores[discard_player] = -256
                     return scores
 
-    # STATE ===========================================================================
+    # ===================== STATE ENCODING ============================================
 
     def get_player_state(self, player: Player) -> np.ndarray:
         """
-        :param player:
-        :return:
+        Calculate the state of a player's hand and return
+        :param player: the player whose state to calculation
+        :return: a (103, ) numpy array containing information about the game state
         """
         hidden = player.encode_hidden_hand()  # 34
         revealed = player.encode_revealed_hand()  # 34
@@ -470,14 +496,15 @@ class MahjongGame:
         # 34*3 + 1 = 103
         return np.concatenate([hidden, revealed, discards, potential_fan])
 
-    def get_state(self):
+    def get_state(self) -> np.ndarray:
         """
-
-        :return:
+        Generate an array representing all information about
+        the current game state and return it.
+        :return: a size (451, ) numpy array containing information about game state
         """
         players = self.players
         player_states = [self.get_player_state(player) for player in players]
-        player_states_vec = np.concatenate(player_states)  # 4 * 103
+        player_states_vec = np.concatenate([ps.flatten() for ps in player_states])  # 4 * 103
 
         latest_tile_vec = np.zeros(34, dtype=np.float32)  # 34
         if self.latest_tile is not None:
@@ -510,41 +537,6 @@ class MahjongGame:
                 step["reward"] = reward
                 step["gameover"] = True
 
-    def log_to_json(self, filepath):
-        """
-        Conver the log to a jSOn file
-        :return:
-        """
-        test = []
-        for action in self.log:
-            test.append({
-                "player_id": action.get("player_id"),
-                "state": action["state"].tolist(),
-                "action_type": action["action_type"],
-                "action": action["action"],
-                "reward": action["reward"],
-                "done": action["gameover"]
-            })
-
-        with open(filepath, "w") as f:
-            json.dump(test, f)
-
-    def get_valid_actions(self):
-        """
-
-        :return:
-        """
-        actions = [i for i in range(0, self.current_player.get_hand_length())]
-        if self.current_player.decide_win(self.latest_tile, self.circle_wind, 0):
-            actions.append(14)
-        if self.current_player.decide_pong(self.latest_tile):
-            actions.append(15)
-        if self.current_player.decide_sheung(self.latest_tile):
-            actions.append(16)
-        if self.current_player.decide_add_kong():
-            actions.append(17)
-        return actions
-
     @staticmethod
     def reward_function(winloss: int, score: int) -> float:
         """
@@ -555,7 +547,101 @@ class MahjongGame:
         """
         return winloss * score
 
-        # LEGACY PLAY TURN
+    def resolve_actions(self, actions: List[Tuple[Optional[int], Optional[str], Optional[Tuple[int, int]]]]) \
+            -> Tuple[Optional[int], Optional[str], Optional[Tuple[int]]]:
+        """
+        Return the highest priority item ONLY (in terms of order of action). Mutates
+        the actions list to be sorted.
+        :param actions: the list of actions, with each item being a 3-tuple containing 1.
+                        the player's ID 2. the string action they intend to make and 3. an
+                        optional 2-tuple of indices (for sheungs only and not for comparison)
+        :return: the item with the highest action priority
+        """
+        if not actions:
+            return None, None, None
+
+        def sort_actions(item):
+            """
+
+            :param item:
+            :return:
+            """
+            player_id, action, indices = item
+
+            if player_id is None:
+                return -100, -100
+            distance = (self.current_player_no - player_id) % 4
+            if action == "win":
+                return 4, -distance
+            if action == "kong":
+                return 3, -distance
+            if action == "pong":
+                return 2, -distance
+            if action in {"lower sheung", "middle sheung", "upper sheung", "sheung"}:
+                return 1, -distance
+            raise ValueError("Invalid action")
+
+        actions.sort(key=sort_actions, reverse=True)
+        return actions[0]
+
+    def validate_actions(self, player: Player, action) -> bool:
+        """
+        Validate a player's choice of action
+
+        :param player: the player whose turn it is to act
+        :param action: the action they selected
+        :return: return True if move is valid, otherwise False
+        """
+        if action == "win":
+            return Player.decide_win(player, self.latest_tile, self.circle_wind, self.current_player_no)
+        elif action == "pong":
+            return Player.decide_pong(player, self.latest_tile)
+        elif action == "kong":
+            return Player.decide_add_kong(player, self.latest_tile)
+        elif action == "lower sheung":
+            return Player.show_all_possible_sheungs(player, self.latest_tile)[0] is not None
+        elif action == "middle sheung":
+            return Player.show_all_possible_sheungs(player, self.latest_tile)[1] is not None
+        elif action == "upper sheung":
+            return Player.show_all_possible_sheungs(player, self.latest_tile)[2] is not None
+        return False
+
+    def get_legal_actions(self, discard_turn: bool, player: Player) -> List[int]:
+        """
+        Return a list of legal actions a player can make at any given moment
+        :param discard_turn: whether it is the player's turn to act or if they
+                             are responding to another player's discard
+        :param player: the player who wants to act
+        :return: a list of numerical actions (corresponding to enumerator MahjongActions
+                 which the player can legally make
+        """
+        legal_actions = []
+
+        if discard_turn:
+            # player can only discard
+            legal_actions.extend(range(len(player.hidden_hand)))
+        else:
+            # a player can only respond to the move, or pass
+            action_map = {
+                MahjongActions.WIN: "win",
+                MahjongActions.ADD_KONG: "kong",
+                MahjongActions.PONG: "pong",
+                MahjongActions.LOWER_SHEUNG: "lower sheung",
+                MahjongActions.MIDDLE_SHEUNG: "middle sheung",
+                MahjongActions.UPPER_SHEUNG: "upper sheung"
+            }
+
+            for action_id, action_str in action_map.items():
+                if self.validate_actions(player, action_str):
+                    legal_actions.append(action_id)
+
+            legal_actions.append(MahjongActions.PASS)
+
+        return legal_actions
+
+
+"""
+        LEGACY PLAY TURN CODE FOR REFERENCE ONLY
 
         # check_sheung, action_taken = self.check_interrupt(state)
         # if not action_taken and check_sheung and self.latest_tile is not None:  # kong takes latest tile
@@ -605,47 +691,4 @@ class MahjongGame:
         #         "reward": 0.0,
         #         "gameover": False
         #     })
-
-    def resolve_actions(self, actions: List[Tuple]) -> Tuple:
-        if not actions:
-            return None, None, None
-
-        def sort_actions(item):
-            player_id, action, indices = item
-
-            if player_id is None:
-                return -100, -100
-            distance = (self.current_player_no - player_id) % 4
-            if action == "win":
-                return 4, -distance
-            if action == "kong":
-                return 3, -distance
-            if action == "pong":
-                return 2, -distance
-            if action in {"lower sheung", "middle sheung", "upper sheung", "sheung"}:
-                return 1, -distance
-            raise ValueError("Invalid action")
-
-        actions.sort(key=sort_actions, reverse=True)
-        return actions[0]
-
-    def validate_actions(self, player: Player, action) -> bool:
-        """
-        Check whether the move is valid
-        :param player:
-        :param action:
-        :return:
-        """
-        if action == "win":
-            return Player.decide_win(player, self.latest_tile, self.circle_wind, self.current_player_no)
-        elif action == "pong":
-            return Player.decide_pong(player, self.latest_tile)
-        elif action == "kong":
-            return Player.decide_add_kong(player, self.latest_tile)
-        elif action == "lower sheung":
-            return Player.show_all_possible_sheungs(player, self.latest_tile)[0] is not None
-        elif action == "middle sheung":
-            return Player.show_all_possible_sheungs(player, self.latest_tile)[1] is not None
-        elif action == "upper sheung":
-            return Player.show_all_possible_sheungs(player, self.latest_tile)[2] is not None
-        return False
+"""

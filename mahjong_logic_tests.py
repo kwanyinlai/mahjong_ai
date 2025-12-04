@@ -1,5 +1,5 @@
 """
-Test class for our Mahjong logic
+mahjong_logic_tests.py - test class for our Mahjong logic
 """
 
 import unittest
@@ -209,3 +209,17 @@ class TestMahjongLogic(unittest.TestCase):
 
         player1.hidden_hand.sort()
         self.assertIs(Player.score_hand(player1.revealed_sets, player1.flowers, "east", 0), 0)
+
+    def test_thirteen_orphans(self):
+        """
+        Edge case of thirteen orphans to be checked with winning hand
+        """
+        # TODO: need to rewrite
+        # player1 = YesBot(1, 1)
+        # player1._set_orphans()
+        # pair_exists = any(player1.hidden_hand[i] == player1.hidden_hand[i + 1] for i in range(len(player1.hidden_hand) - 1))
+        # all_orphans = player1.orphans <= {tile for tile in player1.hidden_hand}
+        #
+        # self.assertIs(len(player1.hidden_hand), 14)
+        # self.assertIs(pair_exists, True)
+        # self.assertIs(all_orphans, True)

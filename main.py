@@ -7,6 +7,7 @@ from mahjong_table import MahjongTable
 from player import Player
 from policy import Policy, SimplePolicy
 from rl_bot import RLAgent
+from training import Training
 
 if __name__ == "__main__":
     # table = MahjongTable()
@@ -24,3 +25,4 @@ if __name__ == "__main__":
 
     # MahjongGame.test_win_scenario()
     # MahjongGame.test_win_claim()
+    training = Training().run_training_loop()
