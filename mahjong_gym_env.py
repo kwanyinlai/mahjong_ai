@@ -42,7 +42,7 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         self.observation_space = spaces.Box(
             low=0.0,
             high=1.0,
-            shape=(451,),  # size of get_state
+            shape=(,),  # size of get_state
             dtype=np.float32
         )
 
@@ -59,7 +59,11 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         Reset the game state
         :return:
         """
+
+        for player in self.game.players:
+            player.soft_reset()
         self.game.setup_game()
+        self.is_discard = True
         self.game.current_player_no = 0
         self.game.current_player = self.game.players[0]
         return self.get_observation()
@@ -108,6 +112,8 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         pass
 
     def _map_int_to_action(self, player, action) -> Tuple[Optional[str], Optional[Tuple]]:
+        if 0 <= action <= 13:
+            return None, None
         match action:
             case MahjongActions.WIN:
                 return "win", None
@@ -180,15 +186,9 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
             elif i == self.controlling_player_id:
                 if action == MahjongActions.PASS:
                     continue
-                action_is_valid = self.game.validate_actions(rl_player, action)
-                if not action_is_valid:
-                    reward -= 1.0
-                    action_str = None
-                    print(action)
-                    raise RuntimeError("We should not be permitted to make invalid actions")
-                else:
-                    action_str, possible_indices = self._map_int_to_action(rl_player, action)
+                action_str, possible_indices = self._map_int_to_action(rl_player, action)
                 if action_str is not None:
+                    reward += 0.1
                     action_queue.append(
                         (
                             self.controlling_player_id, action_str, possible_indices
