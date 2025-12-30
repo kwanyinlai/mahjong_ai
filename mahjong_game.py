@@ -16,7 +16,7 @@ class MahjongGame:
     """
     Represents one Mahjong Game
     """
-    state_size = 911
+    state_size = 915
     tiles: List[MahjongTile]
     players: List[Player]
     current_player_no: int
@@ -520,6 +520,11 @@ class MahjongGame:
         if self.latest_tile is not None:
             latest_tile_vec[self.latest_tile.to_index()] = 1.0
 
+        discarding_player_vec = np.zeros(4, dtype=np.float32)
+        if self.discarding_player is not None:
+            discarding_player_vec[self.discarding_player.player_id] = 1.0
+        # 4
+
         tiles_remaining = np.array([len(self.tiles) / 144], dtype=np.float32)  # 1,
         # normalised since HK Mahjong uses 144 tiles
 
@@ -533,6 +538,7 @@ class MahjongGame:
         state = np.concatenate([
             player_states_vec,
             latest_tile_vec,
+            discarding_player_vec,
             tiles_remaining,
             current_turn,
             circle_wind_vec
@@ -709,4 +715,66 @@ class MahjongGame:
         #         "reward": 0.0,
         #         "gameover": False
         #     })
-"""
+        """
+
+    def reconstruct_game(self, state: np.ndarray) -> MahjongGame:
+        """
+        Reconstruct a MahjongGame from the given state array.
+
+        :param state: A numpy array representing the game state.
+        :return: A new MahjongGame instance reconstructed from the state.
+        """
+        # Initialize players and game details
+        players = [Player(player_id=i) for i in range(4)]
+
+        # Step 1: Rebuild player states
+        player_states_vec = state[:868]  # First 868 values correspond to all player states
+
+        # Reconstruct each player's state from the player states vector (each player has 217 state elements)
+        for i in range(4):
+            player_start_index = i * 217
+            player_end_index = (i + 1) * 217
+            player_state = player_states_vec[player_start_index:player_end_index]
+
+            player = Player.player_from_player_state(
+                player_state
+            )
+
+        latest_tile_vec = state[868:902]
+        latest_tile_index = np.argmax(latest_tile_vec)
+        latest_tile = MahjongTile.index_to_tile(
+            int(latest_tile_index)
+        )
+
+        discarding_player_vec = state[902:906]
+        discarding_player_id = np.argmax(discarding_player_vec)
+        discarding_player = players[discarding_player_id]
+
+        tiles_remaining = int(state[906] * 144)
+        current_turn_vec = state[907:911]
+        current_player_id = np.argmax(current_turn_vec)
+        current_player = players[current_player_id]
+
+        # Rebuild circle wind information
+        circle_wind_vec = state[911:915]  # The next 4 values are for the circle wind
+        circle_wind_index = np.argmax(circle_wind_vec)
+        circle_wind_mapping = {0: 'east', 1: 'south', 2: 'west', 3: 'north'}
+        circle_wind = circle_wind_mapping[int(circle_wind_index)]
+
+        game = MahjongGame(players=players, circle_wind=circle_wind)
+
+        game.tiles = MahjongGame.initialize_tiles()
+        for player in game.players:
+            for tile in player.hidden_hand:
+                game.tiles.remove(tile)
+            for tile_set in player.revealed_sets:
+                for tile in tile_set:
+                    game.tiles.remove(tile)
+
+        game.current_player = current_player
+        game.current_player_no = current_player.player_order
+        game.latest_tile = latest_tile
+        game.discarding_player = discarding_player
+        game.game_over = False
+
+        return game

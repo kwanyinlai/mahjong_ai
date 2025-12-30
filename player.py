@@ -576,3 +576,66 @@ class Player:
         if (sheung_indices := self.decide_sheung(discarded_tile)) and player_number == (self.player_id - 1) % 4:
             return self.player_id, "sheung", sheung_indices
         return None, None, None
+
+    @staticmethod
+    def player_from_player_state(cls, player_state, player_id, player_order):
+
+        player = Player(player_id=player_id, player_order=player_order)
+
+        hidden_hand_vec = player_state[:34]
+        player.hidden_hand = Player.create_tile_pile(hidden_hand_vec)
+
+        revealed_sets_vec = player_state[34:34 * 5]
+        player.revealed_sets = Player.create_revealed_sets(revealed_sets_vec)
+
+        discarded_pile_vec = player_state[34 * 5:34 * 6]
+        player.discard_pile = Player.create_tile_pile(discarded_pile_vec)
+
+        flower_vec = player_state[34 * 6:34 * 6 + 8]
+        player.flowers = Player.create_flowers(flower_vec)
+
+        return player
+
+    @staticmethod
+    def create_tile_pile(hand_vec):
+        """
+        Generate from normalised vector
+        :param hand_vec:
+        :return:
+        """
+        hand = []
+        for i in range(34):
+            count = int(hand_vec[i] * 4)
+            for _ in range(count):
+                tile = MahjongTile.index_to_tile(i)
+                hand.append(tile)
+        return hand
+
+    @staticmethod
+    def create_revealed_sets(revealed_sets_vec):
+        revealed_sets = []
+        for i in range(4):
+            revealed_set = []
+            for j in range(34):
+                count = int(revealed_sets_vec[i * 34 + j] * 4)
+                for _ in range(count):
+                    tile = MahjongTile.index_to_tile(j)
+                    revealed_set.append(tile)
+            if revealed_set:
+                revealed_sets.append(revealed_set)
+        return revealed_sets
+
+    @staticmethod
+    def create_flowers(flower_vec):
+        flowers = []
+        flower_mapping = {0: 'plum', 1: 'orchid', 2: 'chrysanthemum', 3: 'bamboo',
+                          4: 'summer', 5: 'spring', 6: 'autumn', 7: 'winter'}
+        for i in range(8):
+            count = int(flower_vec[i] * 4)  # Reverse the normalization
+            for _ in range(count):
+                if flower_mapping[i] in {'plum', 'orchid', 'chrysanthemum', 'bamboo'}:
+                    flower = MahjongTile(tiletype='flower', subtype='flower', numchar=flower_mapping[i])
+                else:
+                    flower = MahjongTile(tiletype='flower', subtype='season', numchar=flower_mapping[i])
+                flowers.append(flower)
+        return flowers
