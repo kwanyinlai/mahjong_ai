@@ -16,6 +16,7 @@ class MahjongGame:
     """
     Represents one Mahjong Game
     """
+    state_size = 911
     tiles: List[MahjongTile]
     players: List[Player]
     current_player_no: int
@@ -108,6 +109,7 @@ class MahjongGame:
         self.current_player_no = 0
         self.current_player = self.players[self.current_player_no]
         self.discarded_tiles = []
+        self.game_over = False
 
         # print("SETUP COMPLETE")
 
@@ -184,8 +186,9 @@ class MahjongGame:
             player.flowers.append(drawn_tile)
             return None
 
-        if (player.decide_win(drawn_tile, self.circle_wind, self.current_player_no, state)
-                and Player.decide_win(player, drawn_tile, self.circle_wind, self.current_player_no, state)):
+        # if (player.decide_win(drawn_tile, self.circle_wind, self.current_player_no, state)
+        #         and Player.decide_win(player, drawn_tile, self.circle_wind, self.current_player_no, state)):
+        if Player.decide_win(player, drawn_tile, self.circle_wind, self.current_player_no, state):
             self.game_over = True
             self.winner = player
             print(f"Player {player.player_id} has claimed a win")
@@ -264,6 +267,7 @@ class MahjongGame:
                     actioning_player = player
                     break
             if action_to_execute == "win":
+                print("WE HAVE WON")
                 self.game_over = True
                 self.winner = actioning_player
                 self.log.append({
@@ -481,30 +485,36 @@ class MahjongGame:
         """
         Calculate the state of a player's hand and return
         :param player: the player whose state to calculation
-        :return: a (103, ) numpy array containing information about the game state
+        :return: a (115, ) numpy array containing information about the game state
         """
-        hidden = player.encode_hidden_hand()  # 34
-        revealed = player.encode_revealed_hand()  # 34
+        hidden = player.encode_hidden_hand()  # 34 (136 / 4, where 136 is number of tiles - flowers)
+        # encoding this to train on complete information, then we can mask it out
+        revealed = player.encode_revealed_hand()  # 34 * 4
         discards = player.encode_discarded_pile()  # 34
+        flower_set = player.encode_flower_set()  # 8
         potential_fan = np.array([Player.potential_fan(
             player.revealed_sets,
             player.flowers,
             self.circle_wind,
             player.player_order
         ) / 20.0], dtype=np.float32)  # 1, max fan is 20
+        seat_wind_vec = np.zeros(4, dtype=np.float32)  # 4
+        seat_wind_index = player.player_order % 4  # simplified to always assume constant seat wind
+        # corresponding to order
+        seat_wind_vec[seat_wind_index] = 1.0
 
-        # 34*3 + 1 = 103
-        return np.concatenate([hidden, revealed, discards, potential_fan])
+        # 34*3 + 8 + 4 + 1 = 217
+        return np.concatenate([hidden, revealed, discards, flower_set, seat_wind_vec, potential_fan])
 
     def get_state(self) -> np.ndarray:
         """
         Generate an array representing all information about
         the current game state and return it.
-        :return: a size (451, ) numpy array containing information about game state
+        :return: a size (MahjongGame.state_size, ) numpy array containing information about game state
         """
         players = self.players
         player_states = [self.get_player_state(player) for player in players]
-        player_states_vec = np.concatenate([ps.flatten() for ps in player_states])  # 4 * 103
+        player_states_vec = np.concatenate([ps.flatten() for ps in player_states])  # 4 * 217
 
         latest_tile_vec = np.zeros(34, dtype=np.float32)  # 34
         if self.latest_tile is not None:
@@ -516,11 +526,16 @@ class MahjongGame:
         current_turn = np.zeros(len(players), dtype=np.float32)  # 4
         current_turn[self.current_player.player_order] = 1.0
 
+        circle_wind_vec = np.zeros(4, dtype=np.float32)
+        circle_wind_mapping = {'east': 0, 'south': 1, 'west': 2, 'north': 3}
+        circle_wind_vec[circle_wind_mapping[self.circle_wind]] = 1.0  # 4
+
         state = np.concatenate([
             player_states_vec,
             latest_tile_vec,
             tiles_remaining,
-            current_turn
+            current_turn,
+            circle_wind_vec
         ])
 
         return state
@@ -620,7 +635,7 @@ class MahjongGame:
         if discard_turn and our_turn:
             # player can only discard
             legal_actions.extend(range(len(player.hidden_hand)))
-        elif discard_turn or (not our_turn and not discard_turn):
+        elif discard_turn or (our_turn and not discard_turn):
             legal_actions = [MahjongActions.PASS]
         else:
             # a player can only respond to the move, or pass
@@ -642,7 +657,8 @@ class MahjongGame:
         return legal_actions
 
 
-"""
+
+        """
         LEGACY PLAY TURN CODE FOR REFERENCE ONLY
 
         # check_sheung, action_taken = self.check_interrupt(state)
