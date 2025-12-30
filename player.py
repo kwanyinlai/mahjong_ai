@@ -527,11 +527,16 @@ class Player:
     def encode_revealed_hand(self) -> np.ndarray:
         """
         Encode player's revealed hand (completed sets)
+        Each revealed set is separated by 34. For instance, if
+        we have three revealed sets, then the first 0-33 elements of the array
+        represent the first, 34-67 are the second set, etc.
+        Size of 34 * 4
         """
-        vec = np.zeros(34, dtype=np.float32)
-        for tile in [tile for subset in self.revealed_sets for tile in subset]:
-            vec[tile.to_index()] += 1
-        return vec / 4.0
+        revealed_vecs = np.zeros(34 * 4, dtype=np.float32)
+        for i in range(len(self.revealed_sets)):
+            for tile in self.revealed_sets[i]:
+                revealed_vecs[i*34 + tile.to_index()] += 1
+        return revealed_vecs / 4.0
 
     def encode_discarded_pile(self):
         """
@@ -541,6 +546,15 @@ class Player:
         for tile in self.discard_pile:
             vec[tile.to_index()] += 1
         return vec / 4.0
+
+    def encode_flower_set(self):
+        vec = np.zeros(8, dtype=np.float32)
+        flower_mapping = {'plum': 0, 'orchid': 1, 'chrysanthemum': 2, 'bamboo': 3,
+                          'summer': 4, 'spring': 5, 'autumn': 6, 'winter': 7}
+        for flower in self.flowers:
+            vec[flower_mapping[flower.tiletype]] += 1
+        return vec
+
 
     def count_flower_fan(self) -> int:
         """
