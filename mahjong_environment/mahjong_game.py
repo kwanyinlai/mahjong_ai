@@ -16,7 +16,7 @@ class MahjongGame:
     """
     Represents one Mahjong Game
     """
-    state_size = 915
+    state_size = 919
     tiles: List[MahjongTile]
     players: List[Player]
     current_player_no: int
@@ -25,6 +25,8 @@ class MahjongGame:
     discarded_tiles: List[MahjongTile]
     latest_tile: MahjongTile = None
     game_over: bool
+    last_acting_player: Player
+    last_action: MahjongActions
     winner: Player = None
     log: List[Dict]
     circle_wind: str
@@ -115,6 +117,7 @@ class MahjongGame:
 
     # ============================= GAMEPLAY ========================================
 
+    # WARNING THE BELOW IS LEGACY
     def play_round(self) -> Player | None:
         """
         Play one round of a MahjongGame to the end until a draw or win. Return
@@ -174,6 +177,8 @@ class MahjongGame:
         :param player: the player who is drawing
         :return: the drawn tile
         """
+
+        self.last_acting_player = player
         drawn_tile = self.tiles.pop()
         state = self.get_state()
         print(f"Player {player.player_id} has drawn {drawn_tile}")
@@ -193,6 +198,7 @@ class MahjongGame:
             self.winner = player
             print(f"Player {player.player_id} has claimed a win")
             print(player.player_id)
+            self.last_action = MahjongActions.WIN
             state = self.get_state()
             self.log.append({
                 "player_id": self.current_player.player_id,
@@ -204,27 +210,35 @@ class MahjongGame:
             })
             return None
 
-        latest_tile, self.latest_tile = self.latest_tile, drawn_tile
-        state = self.get_state()
-        while Player.decide_add_kong(player, drawn_tile, state) and player.decide_add_kong(drawn_tile, state) and len(
-                self.tiles) > 0:
-            for _ in range(3):
-                self.players[self.current_player_no].hidden_hand.remove(drawn_tile)
+        else:
 
-            self.players[self.current_player_no].revealed_sets.append([drawn_tile,
-                                                                       drawn_tile,
-                                                                       drawn_tile,
-                                                                       drawn_tile])
-            print(f"Player {player.player_id} has claimed a kong")
-            print(f"Player {player.player_id} is redrawing")
-            latest_tile = self.draw_tile(player)
-            return latest_tile
+            latest_tile, self.latest_tile = self.latest_tile, drawn_tile
 
-        self.latest_tile = latest_tile
-        player.add_tile(drawn_tile)
-        # print("Player " + str(player.player_id) + " put the following tile into your hand")
-        # print(drawn_tile)
-        return drawn_tile
+            state = self.get_state()
+            while Player.decide_add_kong(player, drawn_tile, state) and player.decide_add_kong(drawn_tile,
+                                                                                               state) and len(
+                    self.tiles) > 0:
+                for _ in range(3):
+                    self.players[self.current_player_no].hidden_hand.remove(drawn_tile)
+
+                self.players[self.current_player_no].revealed_sets.append([drawn_tile,
+                                                                           drawn_tile,
+                                                                           drawn_tile,
+                                                                           drawn_tile])
+                print(f"Player {player.player_id} has claimed a kong")
+                print(f"Player {player.player_id} is redrawing")
+                latest_tile = self.draw_tile(player)
+
+                self.last_acting_player = player
+                self.last_action = MahjongActions.ADD_KONG
+
+                return latest_tile
+
+            self.latest_tile = latest_tile
+            player.add_tile(drawn_tile)
+            # print("Player " + str(player.player_id) + " put the following tile into your hand")
+            # print(drawn_tile)
+            return drawn_tile
 
     def play_turn(self) -> Tuple[Optional[int], Optional[str], Optional[List]]:
         """
@@ -259,9 +273,11 @@ class MahjongGame:
         :param possible_indices: indices for sheung only for reference not for comparison
         :return: return True if we performed some computaiton, otherwise False
         """
+
         if actioning_player_id is not None:
             state = self.get_state()
             actioning_player = self.players[actioning_player_id]
+            self.last_acting_player = actioning_player
             for player in self.players:
                 if player.player_id == actioning_player_id:
                     actioning_player = player
@@ -278,6 +294,7 @@ class MahjongGame:
                     "reward": 0.0,
                     "gameover": True
                 })
+                self.last_action = MahjongActions.WIN
                 return True
             elif action_to_execute == "kong":
                 print(f"Kong is called by Player {actioning_player}")
@@ -294,6 +311,7 @@ class MahjongGame:
                 })
                 self.current_player_no = actioning_player.player_order
                 self.current_player = actioning_player
+                self.last_action = MahjongActions.ADD_KONG
                 self.draw_tile(actioning_player)
                 return True
             elif action_to_execute == "pong":
@@ -311,6 +329,7 @@ class MahjongGame:
                 })
                 self.current_player_no = actioning_player.player_order
                 self.current_player = self.players[self.current_player_no]
+                self.last_action = MahjongActions.PONG
                 return True
             elif action_to_execute == "sheung":
                 print(f"Sheung is called by Player {actioning_player_id}")
@@ -331,6 +350,8 @@ class MahjongGame:
                 })
                 self.current_player_no = actioning_player.player_order
                 self.current_player = self.players[self.current_player_no]
+                self.last_action = MahjongActions.UPPER_SHEUNG  # doesn't matter what the action is, just that it is a
+                # sheung
                 return True
         return False
 
@@ -346,7 +367,12 @@ class MahjongGame:
         if tile is not None:
             self.discarded_tiles.append(tile)
             self.discarding_player = player
+
             print(f"Player {player.player_id} discarded {tile}")
+
+            self.last_acting_player = player
+            self.last_action = MahjongActions.DISCARD  # doesn't matter what kind of discard, just that it is a discard
+
             player.hidden_hand.remove(tile)
             player.discard_pile.append(tile)
             self.latest_tile = tile
@@ -364,6 +390,10 @@ class MahjongGame:
         self.latest_tile = discarded_tile
         self.discarded_tiles.append(discarded_tile)
         self.discarding_player = player
+
+        self.last_acting_player = player
+        self.last_action = MahjongActions.DISCARD  # doesn't matter what kind of discard, just that it is a discard
+
         print(f"Player {player.player_id} discarded {discarded_tile}")
         player.hidden_hand.remove(discarded_tile)
         player.discard_pile.append(discarded_tile)
@@ -535,13 +565,17 @@ class MahjongGame:
         circle_wind_mapping = {'east': 0, 'south': 1, 'west': 2, 'north': 3}
         circle_wind_vec[circle_wind_mapping[self.circle_wind]] = 1.0  # 4
 
+        last_acting_player_vec = np.zeros(4, dtype=np.float32)
+        last_acting_player_vec[self.last_acting_player.player_id] = 1.0  # 4
+
         state = np.concatenate([
             player_states_vec,
             latest_tile_vec,
             discarding_player_vec,
             tiles_remaining,
             current_turn,
-            circle_wind_vec
+            circle_wind_vec,
+            last_acting_player_vec
         ])
 
         return state
@@ -662,8 +696,6 @@ class MahjongGame:
 
         return legal_actions
 
-
-
         """
         LEGACY PLAY TURN CODE FOR REFERENCE ONLY
 
@@ -726,7 +758,7 @@ class MahjongGame:
         :return: A new MahjongGame instance reconstructed from the state.
         """
         # Initialize players and game details
-        players = [Player(player_id=i) for i in range(4)]
+        players = [Player(player_id=i, player_order=i) for i in range(4)]
 
         # Step 1: Rebuild player states
         player_states_vec = state[:868]  # First 868 values correspond to all player states
@@ -742,8 +774,6 @@ class MahjongGame:
                 player_state, i, i
             )
             players.append(player)
-
-
 
         latest_tile_vec = state[868:902]
         latest_tile_index = np.argmax(latest_tile_vec)
@@ -767,6 +797,10 @@ class MahjongGame:
         circle_wind_mapping = {0: 'east', 1: 'south', 2: 'west', 3: 'north'}
         circle_wind = circle_wind_mapping[int(circle_wind_index)]
 
+        last_acting_player_vec = state[915:919]
+        last_acting_player_index = np.argmax(last_acting_player_vec)
+        last_acting_player = players[last_acting_player_index]
+
         game = MahjongGame(players=players, circle_wind=circle_wind)
 
         game.players = players
@@ -784,5 +818,6 @@ class MahjongGame:
         game.latest_tile = latest_tile
         game.discarding_player = discarding_player
         game.game_over = False
+        game.last_acting_player = last_acting_player
 
         return game

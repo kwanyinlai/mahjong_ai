@@ -1,13 +1,5 @@
-import numpy as np
-
-from ai_bot import BasicBot, YesBot
-from mahjong_game import MahjongGame
 from mahjong_gym_env import MahjongEnvironmentAdapter
-from mahjong_table import MahjongTable
-from player import Player
-from policy import Policy, SimplePolicy
-from rl_bot import RLAgent
-from training import Training
+from reinforcement_learning.training import Training
 
 if __name__ == "__main__":
     # table = MahjongTable()

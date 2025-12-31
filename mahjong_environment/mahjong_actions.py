@@ -11,6 +11,7 @@ class MahjongActions(IntEnum):
     """
     enumerator for MahjongActions
     """
+    DISCARD = 0
     WIN = 14
     ADD_KONG = 15
     PONG = 16
