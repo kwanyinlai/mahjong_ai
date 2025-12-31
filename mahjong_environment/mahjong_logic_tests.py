@@ -4,8 +4,8 @@ mahjong_logic_tests.py - test class for our Mahjong logic
 
 import unittest
 
-from ai_bot import BasicBot, YesBot
-from mahjong_game import MahjongGame
+from mahjong_environment.ai_bot import BasicBot, YesBot
+from mahjong_environment.mahjong_game import MahjongGame
 from player import Player
 from tile import MahjongTile
 

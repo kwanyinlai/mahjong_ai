@@ -578,7 +578,7 @@ class Player:
         return None, None, None
 
     @staticmethod
-    def player_from_player_state(cls, player_state, player_id, player_order):
+    def player_from_player_state(player_state, player_id, player_order):
 
         player = Player(player_id=player_id, player_order=player_order)
 

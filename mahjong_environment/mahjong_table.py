@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from ai_bot import BasicBot
-from mahjong_game import MahjongGame
+from mahjong_environment.ai_bot import BasicBot
+from mahjong_environment.mahjong_game import MahjongGame
 from player import Player
 
 

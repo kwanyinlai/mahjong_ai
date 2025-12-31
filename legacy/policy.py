@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 
-from tile import MahjongTile
+from mahjong_environment.tile import MahjongTile
 
 
 class Policy:

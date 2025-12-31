@@ -717,7 +717,8 @@ class MahjongGame:
         #     })
         """
 
-    def reconstruct_game(self, state: np.ndarray) -> MahjongGame:
+    @staticmethod
+    def reconstruct_game(state: np.ndarray) -> MahjongGame:
         """
         Reconstruct a MahjongGame from the given state array.
 
@@ -731,14 +732,18 @@ class MahjongGame:
         player_states_vec = state[:868]  # First 868 values correspond to all player states
 
         # Reconstruct each player's state from the player states vector (each player has 217 state elements)
+        players = []
         for i in range(4):
             player_start_index = i * 217
             player_end_index = (i + 1) * 217
             player_state = player_states_vec[player_start_index:player_end_index]
 
             player = Player.player_from_player_state(
-                player_state
+                player_state, i, i
             )
+            players.append(player)
+
+
 
         latest_tile_vec = state[868:902]
         latest_tile_index = np.argmax(latest_tile_vec)
@@ -751,6 +756,7 @@ class MahjongGame:
         discarding_player = players[discarding_player_id]
 
         tiles_remaining = int(state[906] * 144)
+
         current_turn_vec = state[907:911]
         current_player_id = np.argmax(current_turn_vec)
         current_player = players[current_player_id]
@@ -762,6 +768,8 @@ class MahjongGame:
         circle_wind = circle_wind_mapping[int(circle_wind_index)]
 
         game = MahjongGame(players=players, circle_wind=circle_wind)
+
+        game.players = players
 
         game.tiles = MahjongGame.initialize_tiles()
         for player in game.players:

@@ -9,7 +9,7 @@ from enum import IntEnum
 
 class MahjongActions(IntEnum):
     """
-
+    enumerator for MahjongActions
     """
     WIN = 14
     ADD_KONG = 15

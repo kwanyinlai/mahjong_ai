@@ -9,6 +9,7 @@ from gymnasium import spaces
 import numpy as np
 
 from mahjong_actions import MahjongActions
+from mahjong_environment.player import Player
 from mahjong_game import MahjongGame
 from reinforcement_learning.rl_bot import RLAgent
 from tile import MahjongTile
@@ -22,10 +23,8 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
     game: MahjongGame
     is_discard: bool = True  # if it is a discard turn, True, otherwise interrupt is False
 
-    def __init__(self, players, circle_wind):
+    def __init__(self, players: List[Player] = None, circle_wind: str = '', game=None):
         super().__init__()
-        self.game = MahjongGame(players, circle_wind)
-
         self.action_space = spaces.Discrete(21)
         # 0 - 13: discard tiles 0 to 13
         # 14 claim win
@@ -43,6 +42,10 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
             shape=(MahjongGame.state_size,),  # size of get_state
             dtype=np.float32
         )
+        if game is not None:
+            self.game = game
+        else:
+            self.game = MahjongGame(players, circle_wind)
 
     def get_observation(self) -> np.ndarray:
         """
@@ -82,10 +85,11 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
             assert acting_player_index != -1
             acting_player = self.game.players[acting_player_index]
             reward = self._step_discard(reward, acting_player, actions[acting_player_index])
+            self.last_actioning_player = acting_player
         else:
             end_turn, reward = self._step_player_interrupt(reward, actions)
             if end_turn:
-                self.is_discard = not self.is_discard
+                self.is_discard = True
                 obs = self.get_observation()
                 done = self.game.game_over
                 return obs, reward, done
@@ -142,6 +146,7 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
     def _step_player_interrupt(self, reward, actions):
         # consider interrupts by other players
         actioning_player_id, action_to_execute, possible_indices = self.game.resolve_actions(actions)
+        self.last_actioning_player = self.game.players[actioning_player_id]
         is_interrupted = self.game.execute_interrupt(actioning_player_id, action_to_execute, possible_indices)
         if not is_interrupted:
             # sanity check
