@@ -2,7 +2,7 @@
 mahjong_gym_env - wrapper class to adapt for the gymnasium environment
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import gymnasium
 from gymnasium import spaces
@@ -10,7 +10,7 @@ import numpy as np
 
 from mahjong_actions import MahjongActions
 from mahjong_game import MahjongGame
-from rl_bot import RLAgent
+from reinforcement_learning.rl_bot import RLAgent
 from tile import MahjongTile
 
 
@@ -20,13 +20,11 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
     RL in the game
     """
     game: MahjongGame
-    controlling_player_id: int
     is_discard: bool = True  # if it is a discard turn, True, otherwise interrupt is False
 
-    def __init__(self, players, circle_wind, controlling_player_id):
+    def __init__(self, players, circle_wind):
         super().__init__()
         self.game = MahjongGame(players, circle_wind)
-        self.controlling_player_id = controlling_player_id
 
         self.action_space = spaces.Discrete(21)
         # 0 - 13: discard tiles 0 to 13
@@ -42,7 +40,7 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         self.observation_space = spaces.Box(
             low=0.0,
             high=1.0,
-            shape=(,),  # size of get_state
+            shape=(MahjongGame.state_size,),  # size of get_state
             dtype=np.float32
         )
 
@@ -68,37 +66,29 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         self.game.current_player = self.game.players[0]
         return self.get_observation()
 
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, Dict]:
+    def step(self, actions: List[int]) -> Tuple[np.ndarray, List[float], bool]:
         """
         Move the environment for a single step
         """
-        rl_player = self.game.players[self.controlling_player_id]
-        assert isinstance(rl_player, RLAgent)
-        # make sure our controlling player is actually an RL agent
 
-        reward = 0.0
-        info = {}
+        reward = [0, 0, 0, 0]
+        acting_player_index = -1
 
-        if self.game.current_player == rl_player and self.is_discard:
-            reward, info = self._step_our_discard(reward, info, rl_player, action)
-        elif self.game.current_player == rl_player and not self.is_discard:
-            end_turn, reward, info = self._step_other_player_interrupt(reward, info, rl_player, action)
-            if end_turn:
-                self.is_discard = not self.is_discard
-                obs = self.get_observation()
-                done = self.game.game_over
-                return obs, reward, done, info
-        elif self.game.current_player != rl_player and self.is_discard:
-            # other players discard
-            state = self.game.get_state()
-            self.game.discard_tile(self.game.current_player, state)
+        if self.is_discard:
+            for i in range(4):
+                if not actions[i]:
+                    acting_player_index = i
+                    break
+            assert acting_player_index != -1
+            acting_player = self.game.players[acting_player_index]
+            reward = self._step_discard(reward, acting_player, actions[acting_player_index])
         else:
-            end_turn, reward, info = self._step_our_interrupt(reward, info, rl_player, action)
+            end_turn, reward = self._step_player_interrupt(reward, actions)
             if end_turn:
                 self.is_discard = not self.is_discard
                 obs = self.get_observation()
                 done = self.game.game_over
-                return obs, reward, done, info
+                return obs, reward, done
 
         if not self.game.game_over and not self.is_discard:
             self.game.next_turn()
@@ -106,10 +96,7 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
         self.is_discard = not self.is_discard
         obs = self.get_observation()
         done = self.game.game_over
-        return obs, reward, done, info
-
-    def close(self):
-        pass
+        return obs, reward, done
 
     def _map_int_to_action(self, player, action) -> Tuple[Optional[str], Optional[Tuple]]:
         if 0 <= action <= 13:
@@ -146,27 +133,15 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
                 return None, None
         raise ValueError("Invalid action type")
 
-    def _step_our_discard(self, reward, info, rl_player, action):
-        tile_to_discard = rl_player.hidden_hand[action]
-        self.game.discard_tile(rl_player, self.game.get_state(), tile=tile_to_discard)
+    def _step_discard(self, reward, acting_player, action):
+        tile_to_discard = acting_player.hidden_hand[action]
+        self.game.discard_tile(acting_player, self.game.get_state(), tile=tile_to_discard)
 
-        return reward, info
+        return reward
 
-    def _step_other_player_interrupt(self, reward, info, rl_player, action):
+    def _step_player_interrupt(self, reward, actions):
         # consider interrupts by other players
-        action_queue = []
-        for i in range(0, 4):
-            if i == rl_player.player_id:
-                continue
-            else:
-                player = self.game.players[i]
-                queued_action = player.prepare_action(self.game.latest_tile,
-                                                      self.game.circle_wind,
-                                                      self.game.current_player_no)
-                if queued_action is not None:
-                    action_queue.append(queued_action)
-        actioning_player_id, action_to_execute, possible_indices = self.game.resolve_actions(action_queue)
-
+        actioning_player_id, action_to_execute, possible_indices = self.game.resolve_actions(actions)
         is_interrupted = self.game.execute_interrupt(actioning_player_id, action_to_execute, possible_indices)
         if not is_interrupted:
             # sanity check
@@ -174,41 +149,6 @@ class MahjongEnvironmentAdapter(gymnasium.Env):
                 if len(player.hidden_hand) % 3 != 1 and not self.game.game_over:
                     player.print_hand()
                     raise ValueError("The players do not have the right number of tiles in hand")
-            return False, reward, info
+            return False, reward
         else:
-            return True, reward, info
-
-    def _step_our_interrupt(self, reward, info, rl_player, action):
-        action_queue = []
-        for i in range(0, 4):
-            if i == self.game.current_player_no:
-                continue
-            elif i == self.controlling_player_id:
-                if action == MahjongActions.PASS:
-                    continue
-                action_str, possible_indices = self._map_int_to_action(rl_player, action)
-                if action_str is not None:
-                    reward += 0.1
-                    action_queue.append(
-                        (
-                            self.controlling_player_id, action_str, possible_indices
-                        )
-                    )
-            else:
-                player = self.game.players[i]
-                queued_action = player.prepare_action(self.game.latest_tile,
-                                                      self.game.circle_wind,
-                                                      self.game.current_player_no)
-                if queued_action is not None:
-                    action_queue.append(queued_action)
-        actioning_player_id, action_to_execute, possible_indices = self.game.resolve_actions(action_queue)
-        is_interrupted = self.game.execute_interrupt(actioning_player_id, action_to_execute, possible_indices)
-
-        if not is_interrupted:
-            for player in self.game.players:
-                if len(player.hidden_hand) % 3 != 1 and not self.game.game_over:
-                    player.print_hand()
-                    raise ValueError("The players do not have the right number of tiles in hand")
-            return False, reward, info
-        else:
-            return True, reward, info
+            return True, reward
