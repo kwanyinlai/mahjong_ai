@@ -1,4 +1,4 @@
-from mahjong_gym_env import MahjongEnvironmentAdapter
+
 from reinforcement_learning.training import Training
 
 if __name__ == "__main__":
@@ -17,4 +17,8 @@ if __name__ == "__main__":
 
     # MahjongGame.test_win_scenario()
     # MahjongGame.test_win_claim()
-    training = Training().run_training_loop()
+
+    trainer = Training()
+    trainer.num_episodes = 2  # testing
+    trainer.run_training_loop()
+    print("Training finished")
