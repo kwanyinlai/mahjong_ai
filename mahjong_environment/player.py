@@ -10,7 +10,7 @@ from typing import List, Optional, Set, Tuple
 
 import numpy as np
 
-from tile import MahjongTile
+from mahjong_environment.tile import MahjongTile
 
 
 class Player:
@@ -442,6 +442,8 @@ class Player:
         Base functions check if a win is can be claimed. All inheriting functions
         should implement functionality of deciding whether to claim or not
         """
+        if latest_tile is None:
+            return False
         self.add_tile(latest_tile)
         if not self.check_winning_hand(circle_wind):
             self.hidden_hand.remove(latest_tile)
@@ -535,7 +537,7 @@ class Player:
         revealed_vecs = np.zeros(34 * 4, dtype=np.float32)
         for i in range(len(self.revealed_sets)):
             for tile in self.revealed_sets[i]:
-                revealed_vecs[i*34 + tile.to_index()] += 1
+                revealed_vecs[i * 34 + tile.to_index()] += 1
         return revealed_vecs / 4.0
 
     def encode_discarded_pile(self):
@@ -552,9 +554,8 @@ class Player:
         flower_mapping = {'plum': 0, 'orchid': 1, 'chrysanthemum': 2, 'bamboo': 3,
                           'summer': 4, 'spring': 5, 'autumn': 6, 'winter': 7}
         for flower in self.flowers:
-            vec[flower_mapping[flower.tiletype]] += 1
+            vec[flower_mapping[flower.numchar]] += 1
         return vec
-
 
     def count_flower_fan(self) -> int:
         """
@@ -566,7 +567,8 @@ class Player:
     def get_hand_length(self):
         return len(self.hidden_hand)
 
-    def prepare_action(self, discarded_tile, circle_wind, player_number) -> Tuple:
+    def prepare_action(self, discarded_tile, circle_wind, player_number) -> Tuple[Optional[int], Optional[str],
+            Optional[Tuple[int, int]]]:
         if self.decide_win(discarded_tile, circle_wind, player_number):
             return self.player_id, "win", None
         if self.decide_add_kong(discarded_tile):
