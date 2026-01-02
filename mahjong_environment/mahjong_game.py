@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import json
 import random
-import bisect
 from typing import Dict, Union, List, Optional, Tuple
 
 import numpy as np
 
-from mahjong_actions import MahjongActions
-from player import Player
-from tile import MahjongTile
+from mahjong_environment.mahjong_actions import MahjongActions
+from mahjong_environment.player import Player
+from mahjong_environment.tile import MahjongTile
+
+
 
 
 class MahjongGame:
@@ -21,11 +21,11 @@ class MahjongGame:
     players: List[Player]
     current_player_no: int
     current_player: Player
-    discarding_player: Player
+    discarding_player: Player = None
     discarded_tiles: List[MahjongTile]
     latest_tile: MahjongTile = None
     game_over: bool
-    last_acting_player: Player
+    last_acting_player: Player = None
     last_action: MahjongActions
     winner: Player = None
     log: List[Dict]
@@ -98,7 +98,6 @@ class MahjongGame:
                 player_redraw.add_tile(last_tile)
         self.current_player_no = 0
         self.current_player = self.players[0]
-        state = self.get_state()
 
     def setup_game(self):
         """
@@ -262,15 +261,13 @@ class MahjongGame:
 
         return self.resolve_actions(action_queue)
 
-    def execute_interrupt(self, actioning_player_id: Optional[int], action_to_execute: Optional[str],
-                          possible_indices: Optional[List[int]]) -> bool:
+    def execute_interrupt(self, actioning_player_id: Optional[int], action_to_execute: Optional[str]) -> bool:
         """
         Execute the interrupt if the action is not None, and return whether any
         action was executed.
 
         :param actioning_player_id: the player who is interrupting, None if no interrupt
         :param action_to_execute: the action they made, None if no action
-        :param possible_indices: indices for sheung only for reference not for comparison
         :return: return True if we performed some computaiton, otherwise False
         """
 
@@ -282,7 +279,7 @@ class MahjongGame:
                 if player.player_id == actioning_player_id:
                     actioning_player = player
                     break
-            if action_to_execute == "win":
+            if action_to_execute == MahjongActions.WIN:
                 print("WE HAVE WON")
                 self.game_over = True
                 self.winner = actioning_player
@@ -296,7 +293,7 @@ class MahjongGame:
                 })
                 self.last_action = MahjongActions.WIN
                 return True
-            elif action_to_execute == "kong":
+            elif action_to_execute == MahjongActions.ADD_KONG:
                 print(f"Kong is called by Player {actioning_player}")
                 for _ in range(0, 3):
                     actioning_player.hidden_hand.remove(self.latest_tile)
@@ -314,7 +311,7 @@ class MahjongGame:
                 self.last_action = MahjongActions.ADD_KONG
                 self.draw_tile(actioning_player)
                 return True
-            elif action_to_execute == "pong":
+            elif action_to_execute == MahjongActions.PONG:
                 print(f"Pong is called by Player {actioning_player_id}")
                 for _ in range(2):
                     actioning_player.hidden_hand.remove(self.latest_tile)
@@ -331,9 +328,11 @@ class MahjongGame:
                 self.current_player = self.players[self.current_player_no]
                 self.last_action = MahjongActions.PONG
                 return True
-            elif action_to_execute == "sheung":
+            elif action_to_execute in {MahjongActions.LOWER_SHEUNG,
+                                       MahjongActions.UPPER_SHEUNG,
+                                       MahjongActions.MIDDLE_SHEUNG}:
                 print(f"Sheung is called by Player {actioning_player_id}")
-                indices = possible_indices
+                indices = self._find_indices(action_to_execute, executing_player=self.players[actioning_player_id])
                 i1, i2 = sorted(indices, reverse=True)
 
                 sheung_tile_1 = actioning_player.hidden_hand.pop(i1)
@@ -566,7 +565,8 @@ class MahjongGame:
         circle_wind_vec[circle_wind_mapping[self.circle_wind]] = 1.0  # 4
 
         last_acting_player_vec = np.zeros(4, dtype=np.float32)
-        last_acting_player_vec[self.last_acting_player.player_id] = 1.0  # 4
+        if self.last_acting_player is not None:
+            last_acting_player_vec[self.last_acting_player.player_id] = 1.0  # 4
 
         state = np.concatenate([
             player_states_vec,
@@ -602,18 +602,17 @@ class MahjongGame:
         """
         return winloss * score
 
-    def resolve_actions(self, actions: List[Tuple[Optional[int], Optional[str], Optional[Tuple[int, int]]]]) \
-            -> Tuple[Optional[int], Optional[str], Optional[Tuple[int]]]:
+    def resolve_actions(self, actions: List[Tuple[Optional[int], Optional[MahjongActions]]]) -> (
+            Tuple[Optional[int], Optional[MahjongActions]]):
         """
         Return the highest priority item ONLY (in terms of order of action). Mutates
         the actions list to be sorted.
-        :param actions: the list of actions, with each item being a 3-tuple containing 1.
-                        the player's ID 2. the string action they intend to make and 3. an
-                        optional 2-tuple of indices (for sheungs only and not for comparison)
+        :param actions: the list of actions, with each item being a 2-tuple containing 1.
+                        the player's ID 2. the MahjongActions action they intend to make
         :return: the item with the highest action priority
         """
         if not actions:
-            return None, None, None
+            return None, None
 
         def sort_actions(item):
             """
@@ -621,19 +620,20 @@ class MahjongGame:
             :param item:
             :return:
             """
-            player_id, action, indices = item
+            # player_id, action, indices = item
+            player_id, action = item
 
-            if player_id is None:
-                return -100, -100
             distance = (self.current_player_no - player_id) % 4
-            if action == "win":
+            if action == 14:
                 return 4, -distance
-            if action == "kong":
+            if action == 15:
                 return 3, -distance
-            if action == "pong":
+            if action == 16:
                 return 2, -distance
-            if action in {"lower sheung", "middle sheung", "upper sheung", "sheung"}:
+            if 17 <= action <= 19:
                 return 1, -distance
+            if action == 20:
+                return -100, -100
             raise ValueError("Invalid action")
 
         actions.sort(key=sort_actions, reverse=True)
@@ -647,6 +647,8 @@ class MahjongGame:
         :param action: the action they selected
         :return: return True if move is valid, otherwise False
         """
+        if self.latest_tile is None:
+            return False
         if action == "win":
             return Player.decide_win(player, self.latest_tile, self.circle_wind, self.current_player_no)
         elif action == "pong":
@@ -757,14 +759,11 @@ class MahjongGame:
         :param state: A numpy array representing the game state.
         :return: A new MahjongGame instance reconstructed from the state.
         """
-        # Initialize players and game details
-        players = [Player(player_id=i, player_order=i) for i in range(4)]
-
+        players = []
         # Step 1: Rebuild player states
         player_states_vec = state[:868]  # First 868 values correspond to all player states
 
         # Reconstruct each player's state from the player states vector (each player has 217 state elements)
-        players = []
         for i in range(4):
             player_start_index = i * 217
             player_end_index = (i + 1) * 217
@@ -821,3 +820,27 @@ class MahjongGame:
         game.last_acting_player = last_acting_player
 
         return game
+
+    def _find_indices(self, action_to_execute: MahjongActions, executing_player: Player):
+        """
+        Action must be a SHEUNG action. Return the indices of the two other tiles making up the
+        sheung
+        :param action_to_execute:
+        :return:
+        """
+        if action_to_execute == MahjongActions.LOWER_SHEUNG:
+            tile1 = MahjongTile(tiletype=self.latest_tile.tiletype, subtype=self.latest_tile.subtype,
+                                numchar=self.latest_tile.numchar - 2)
+            tile2 = MahjongTile(tiletype=self.latest_tile.tiletype, subtype=self.latest_tile.subtype,
+                                numchar=self.latest_tile.numchar - 1)
+        elif action_to_execute == MahjongActions.MIDDLE_SHEUNG:
+            tile1 = MahjongTile(tiletype=self.latest_tile.tiletype, subtype=self.latest_tile.subtype,
+                                numchar=self.latest_tile.numchar - 1)
+            tile2 = MahjongTile(tiletype=self.latest_tile.tiletype, subtype=self.latest_tile.subtype,
+                                numchar=self.latest_tile.numchar + 1)
+        else:
+            tile1 = MahjongTile(tiletype=self.latest_tile.tiletype, subtype=self.latest_tile.subtype,
+                                numchar=self.latest_tile.numchar + 1)
+            tile2 = MahjongTile(tiletype=self.latest_tile.tiletype, subtype=self.latest_tile.subtype,
+                                numchar=self.latest_tile.numchar + 2)
+        return executing_player.hidden_hand.index(tile1), executing_player.hidden_hand.index(tile2)
