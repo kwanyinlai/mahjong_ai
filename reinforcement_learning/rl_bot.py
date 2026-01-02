@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 from mahjong_environment.player import Player
 
@@ -22,7 +24,7 @@ class RLAgent(Player):
         """
         return self.decision_model.select_action(observation, legal_actions)
 
-    def push_experience(self, experience):
+    def push_experience(self, experience: Tuple[np.ndarray, int, float]):
         """
         Store this experience into the replay buffer
         :param experience:
