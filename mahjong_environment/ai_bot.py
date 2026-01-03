@@ -52,7 +52,7 @@ class RandomBot(Player):
 
     def discard_tile(self, state: np.ndarray = None) -> MahjongTile:
         removed_tile = random.choice(self.hidden_hand)
-        print("PLAYER " + str(self.player_id) + " DISCARDED")
+        # print("PLAYER " + str(self.player_id) + " DISCARDED")
         print(removed_tile)
         return removed_tile
 
