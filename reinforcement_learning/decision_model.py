@@ -18,10 +18,10 @@ class MahjongModel:
     def __init__(self, network: PolicyValueNetwork, learning_rate: float = 0.01, batch_size: int = 32,
                  max_buffer_size: int = 10000):
         """
-        @param network: network with policy-value head
-        @param learning_rate: learning rate for Adam optimizer
-        @param batch_size: number of experiences sampled per update
-        @param max_buffer_size: maximum size of replay buffer
+        :param network: network with policy-value head
+        :param learning_rate: learning rate for Adam optimizer
+        :param batch_size: number of experiences sampled per update
+        :param max_buffer_size: maximum size of replay buffer
         """
         self.network = network
         self.batch_size = batch_size
