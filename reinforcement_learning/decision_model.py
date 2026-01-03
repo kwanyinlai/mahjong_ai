@@ -7,24 +7,49 @@ import random
 import numpy as np
 from collections import deque
 
+from reinforcement_learning.neural_network import PolicyValueNetwork
+
 
 class MahjongModel:
     """
     Inject this to share action selection logic
     """
 
-    def __init__(self, network: nn.Module, learning_rate: float = 0.01, batch_size: int = 32,
+    def __init__(self, network: PolicyValueNetwork, learning_rate: float = 0.01, batch_size: int = 32,
                  max_buffer_size: int = 10000):
         """
-        MahjongModel handles updating of the model
+        @param network: network with policy-value head
+        @param learning_rate: learning rate for Adam optimizer
+        @param batch_size: number of experiences sampled per update
+        @param max_buffer_size: maximum size of replay buffer
         """
         self.network = network
-        self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.replay_buffer = deque(maxlen=max_buffer_size)
         self.optimizer = optim.Adam(self.network.parameters(), lr=learning_rate)
 
-    def store_experience(self, experience: Tuple[np.ndarray, int, float, np.ndarray, bool]):
+    def select_action(self, observation: np.ndarray, legal_actions: List[int]) -> int:
+        """
+
+        :param observation: masked observation from public state (with hidden public information)
+        :param legal_actions: set of legal actions that can be made (MahjongActions)
+        :return: the integer corresponding to the MahjongActions enumerator
+        """
+        # observation to tensor
+        obs_tensor = torch.tensor(observation, dtype=torch.float32).unsqueeze(0)
+        with torch.no_grad():  # no learning just selecting
+            policy_logits, _ = self.network(obs_tensor)
+
+        # Mask illegal actions
+        policy = policy_logits.squeeze().cpu().numpy()
+        policy[~np.isin(np.arange(len(policy)), legal_actions)] = -1e9  # for masking, reference
+        # to softmax which should expect -1e9 as opposed to 0 for true masking to 0 == False
+
+        # Sample from policy
+        probs = torch.softmax(torch.tensor(policy), dim=0).numpy()  # probabilities
+        return np.random.choice(len(probs), p=probs)  # select from probabilities
+
+    def push_experience(self, experience: Tuple[np.ndarray, int, float]):
         """
         Store experience in the replay buffer
         """
@@ -38,40 +63,48 @@ class MahjongModel:
 
     def update_model(self):
         """
-        Update the model using the experiences stored in the replay buffer.
+        Update the model using the experiences stored in the replay buffer if
+        buffer is greater than initialised batch size
         """
         if len(self.replay_buffer) < self.batch_size:
             return
 
         batch = self.sample_batch()
-        states, actions, rewards, next_states, dones = zip(*batch)
+        states, actions, values = zip(*batch)  # only store state, best action, final outcome
 
+        # tensor = higher dimen matrix
         states = torch.tensor(np.array(states), dtype=torch.float32)
+
         actions = torch.tensor(actions, dtype=torch.long)
-        rewards = torch.tensor(rewards, dtype=torch.float32)
-        next_states = torch.tensor(np.array(next_states), dtype=torch.float32)
-        dones = torch.tensor(dones, dtype=torch.float32)
 
-        # Get predictions from the neural network
-        policy_preds, value_preds = self.network(states)
+        values = torch.tensor(values, dtype=torch.float32)
 
-        # LOSS FUNCTION:
-        # for the policy-based, since this is a classificaiton class of probabilities
-        # we will use cross-entropy loss
-        # for the value-based, we can use MSE
-        policy_loss = nn.CrossEntropyLoss()(policy_preds, actions)
-        value_loss = nn.MSELoss()(value_preds.squeeze(), rewards)
+        policy_logits, value_preds = self.network(states)
 
-        # TODO: perhaps weight this
-        total_loss = policy_loss + value_loss
+        # log softmax
+        log_probs = torch.log_softmax(policy_logits, dim=1)
+        # actual chosen
+        chosen_log_probs = log_probs.gather(
+            1, actions.unsqueeze(1)
+        ).squeeze(1)
+        # calculate advantage, i.e. delta prediction from actual result
+        advantages = values - value_preds.squeeze().detach()
+        # minmising loss, log of positive-negative advantge
+        policy_loss = -(chosen_log_probs * advantages).mean()
 
-        # Perform backpropagation and optimization
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        self.optimizer.step()
+        # MSE, delta(prediction - actual)^2
+        value_loss = nn.MSELoss()(value_preds.squeeze(), values)
+
+        weighting = 1.0  # TODO: determien weighting
+        total_loss = policy_loss + weighting * value_loss
+
+        # backpropagation
+        self.optimizer.zero_grad()  # clear old gradients from prev training
+        total_loss.backward()  # step through prev
+        self.optimizer.step()  # weight update
 
     def reset(self):
         """
-        reset replay buffer
+        Reset the replay buffer
         """
         self.replay_buffer.clear()
