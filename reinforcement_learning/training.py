@@ -1,3 +1,4 @@
+from mahjong_environment.mahjong_actions import MahjongActions
 from mahjong_environment.mahjong_game import MahjongGame
 from mahjong_environment.mahjong_game_adapter import MahjongEnvironmentAdapter
 from reinforcement_learning.neural_network import PolicyValueNetwork
@@ -48,16 +49,21 @@ class Training:
                 # ====================== ====================== ======================
                 # ====================== DISCARD PHASE ===========================
                 # ====================== ====================== ======================
+                state = env.game.get_state()
                 legal_actions = [[], [], [], []]
+                env.game.is_discard = True
                 for i in range(len(players)):
                     player = players[i]
                     our_turn = env.game.current_player == player
                     legal_actions[i] = env.game.get_legal_actions(discard_turn=True, our_turn=our_turn, player=player)
 
-                selected_actions = [player.select_actions(legal_actions[i], state) for i, player in enumerate(players)]
+                selected_actions = [(i, MahjongActions(player.select_actions(legal_actions[i], state)))
+                                    for i, player in enumerate(players)]
                 # TODO: Mask public state before passing to decision model
-
                 next_state, done = env.step_with_all_actions(selected_actions)
+                env.game.is_discard = False
+                for i in range(4):
+                    print(f"Player {i} chose action {MahjongActions(selected_actions[i][1])}")
 
                 if env.game.last_acting_player is not None:
                     actioning_player_id = env.game.last_acting_player.player_id
@@ -71,14 +77,20 @@ class Training:
                 # ====================== NON-DISCARD PHASE ===========================
                 # ====================== ====================== ======================
                 legal_actions = [[], [], [], []]
+                state = env.game.get_state()
                 for i in range(len(players)):
                     player = players[i]
                     our_turn = env.game.current_player == player
                     legal_actions[i] = env.game.get_legal_actions(discard_turn=False, our_turn=our_turn, player=player)
 
-                selected_actions = [player.select_actions(legal_actions[i], state) for player in players]
+                selected_actions = [(i, player.select_actions(legal_actions[i], state))
+                                    for i, player in enumerate(players)]
 
                 next_state, done = env.step_with_all_actions(selected_actions)
+                env.game.is_discard = True
+                print(selected_actions)
+                for i in range(4):
+                    print(f"Player {i} chose action {MahjongActions(selected_actions[i][1])}")
 
                 if env.game.last_acting_player is not None:
                     actioning_player_id = env.game.last_acting_player.player_id
