@@ -178,11 +178,11 @@ class MahjongGame:
         self.last_acting_player = player
         drawn_tile = self.tiles.pop()
         state = self.get_state()
-        print(f"Player {player.player_id} has drawn {drawn_tile}")
+        # print(f"Player {player.player_id} has drawn {drawn_tile}")
         while drawn_tile.tiletype == "flower" and len(self.tiles) != 0:
             player.flowers.append(drawn_tile)
             drawn_tile = self.tiles.pop()
-            print(f"Player {player.player_id} has redrawn a flower to {drawn_tile}")
+            # print(f"Player {player.player_id} has redrawn a flower to {drawn_tile}")
 
         if drawn_tile.tiletype == "flower":
             player.flowers.append(drawn_tile)
@@ -222,8 +222,8 @@ class MahjongGame:
                                                                            drawn_tile,
                                                                            drawn_tile,
                                                                            drawn_tile])
-                print(f"Player {player.player_id} has claimed a kong")
-                print(f"Player {player.player_id} is redrawing")
+                # print(f"Player {player.player_id} has claimed a kong")
+                # print(f"Player {player.player_id} is redrawing")
                 latest_tile = self.draw_tile(player)
 
                 self.last_acting_player = player
@@ -281,57 +281,42 @@ class MahjongGame:
                 print("WE HAVE WON")
                 self.game_over = True
                 self.winner = actioning_player
-                self.log.append({
-                    "player_id": actioning_player.player_id,
-                    "state": state,
-                    "action_type": "win",
-                    "is_claim": True,
-                    "reward": 0.0,
-                    "gameover": True
-                })
                 self.last_action = MahjongActions.WIN
                 return True
             elif action_to_execute == MahjongActions.ADD_KONG:
-                print(f"Kong is called by Player {actioning_player}")
+                # print(f"Kong is called by Player {actioning_player}")
                 for _ in range(0, 3):
                     actioning_player.hidden_hand.remove(self.latest_tile)
                 actioning_player.revealed_sets.append([self.latest_tile] * 4)
-                self.log.append({
-                    "player_id": actioning_player.player_id,
-                    "state": state,
-                    "action_type": "kong",
-                    "is_claim": True,
-                    "reward": 0.0,
-                    "gameover": False
-                })
                 self.current_player_no = actioning_player.player_order
                 self.current_player = actioning_player
                 self.last_action = MahjongActions.ADD_KONG
                 self.draw_tile(actioning_player)
+                self.is_discard = True
                 return True
             elif action_to_execute == MahjongActions.PONG:
-                print(f"Pong is called by Player {actioning_player_id}")
+                # print(f"Pong is called by Player {actioning_player_id}")
                 for _ in range(2):
                     actioning_player.hidden_hand.remove(self.latest_tile)
                 actioning_player.revealed_sets.append([self.latest_tile] * 3)
                 self.current_player_no = actioning_player.player_order
                 self.current_player = self.players[self.current_player_no]
                 self.last_action = MahjongActions.PONG
+                self.is_discard = True
                 return True
             elif 17 <= action_to_execute <= 19:
-                print(f"Sheung is called by Player {actioning_player_id}")
+                # print(f"Sheung is called by Player {actioning_player_id}")
                 indices = self.find_indices(action_to_execute, executing_player=self.players[actioning_player_id])
                 i1, i2 = sorted(indices, reverse=True)
-
                 sheung_tile_1 = actioning_player.hidden_hand.pop(i1)
                 sheung_tile_2 = actioning_player.hidden_hand.pop(i2)
-
                 actioning_player.revealed_sets.append([sheung_tile_1, sheung_tile_2, self.latest_tile])
-
                 self.current_player_no = actioning_player.player_order
                 self.current_player = self.players[self.current_player_no]
                 self.last_action = MahjongActions.UPPER_SHEUNG  # doesn't matter what the action is, just that it is a
                 # sheung
+
+                self.is_discard = True
                 return True
         return False
 
@@ -348,10 +333,11 @@ class MahjongGame:
             self.discarded_tiles.append(tile)
             self.discarding_player = player
 
-            print(f"Player {player.player_id} discarded {tile}")
+            # print(f"Player {player.player_id} discarded {tile}")
 
             self.last_acting_player = player
-            self.last_action = MahjongActions.DISCARD  # doesn't matter what kind of discard, just that it is a discard
+            self.last_action = MahjongActions.DISCARD_TILE_1
+            # doesn't matter what kind of discard, just that it is a discard
 
             player.hidden_hand.remove(tile)
             player.discard_pile.append(tile)
@@ -366,7 +352,7 @@ class MahjongGame:
         self.last_acting_player = player
         self.last_action = MahjongActions.DISCARD  # doesn't matter what kind of discard, just that it is a discard
 
-        print(f"Player {player.player_id} discarded {discarded_tile}")
+        # print(f"Player {player.player_id} discarded {discarded_tile}")
         player.hidden_hand.remove(discarded_tile)
         player.discard_pile.append(discarded_tile)
         self.log.append({
