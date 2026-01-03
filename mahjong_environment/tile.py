@@ -93,7 +93,7 @@ class MahjongTile:
         elif 9 <= index < 18:
             return MahjongTile(tiletype="suit", subtype="bamboo", numchar=index+1-9)
         elif 18 <= index < 27:
-            return MahjongTile(tiletypetype="suit", subtype="number", numchar=index+1-18)
+            return MahjongTile(tiletype="suit", subtype="number", numchar=index+1-18)
         elif index == 27:
             return MahjongTile(tiletype="honour", subtype="wind", numchar="east")
         elif index == 28:
