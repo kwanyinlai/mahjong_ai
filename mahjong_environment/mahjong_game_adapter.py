@@ -4,7 +4,6 @@ mahjong_gym_env - wrapper class to adapt for the gymnasium environment
 
 from typing import Dict, List, Optional, Tuple
 
-import gymnasium
 from gymnasium import spaces  # TODO???
 import numpy as np
 
@@ -13,6 +12,11 @@ from mahjong_environment.player import Player
 from mahjong_environment.mahjong_game import MahjongGame
 from reinforcement_learning.rl_bot import RLAgent
 from mahjong_environment.tile import MahjongTile
+
+
+# TODO: need to model the game step-wise, by querying everyone for
+# TODO: win claim, then kong claim, then pong claim, then sheung claim
+# TODO: then proceed to draw + discard
 
 
 class MahjongEnvironmentAdapter:
@@ -47,7 +51,7 @@ class MahjongEnvironmentAdapter:
         )
         if game is not None:
             self.game = game
-            self.is_discard = discard_turn
+            self.game.is_discard = discard_turn
         else:
             self.game = MahjongGame(players, circle_wind)
 
@@ -68,7 +72,7 @@ class MahjongEnvironmentAdapter:
         for player in self.game.players:
             player.soft_reset()
         self.game.setup_game()
-        self.is_discard = True
+        self.game.is_discard = True
         self.game.current_player_no = 0
         self.game.current_player = self.game.players[0]
         return self.get_observation()
@@ -80,31 +84,58 @@ class MahjongEnvironmentAdapter:
         rl_player = self.game.players[self.controlling_player_id]
         assert isinstance(rl_player, RLAgent)
 
-        if self.game.current_player == rl_player and self.is_discard:
+        if self.game.current_player == rl_player and self.game.is_discard:
             self._step_our_discard(rl_player, action)
-        elif self.game.current_player == rl_player and not self.is_discard:
+        elif self.game.current_player == rl_player and not self.game.is_discard:
             end_turn = self._step_other_player_interrupt(rl_player, action)
             if end_turn:
-                self.is_discard = not self.is_discard
+                self.game.is_discard = True
                 obs = self.get_observation()
                 done = self.game.game_over
                 return obs, done
-        elif self.game.current_player != rl_player and self.is_discard:
+        elif self.game.current_player != rl_player and self.game.is_discard:
             # other players discard
             state = self.game.get_state()
             self.game.discard_tile(self.game.current_player, state)
         else:
             end_turn = self._step_our_interrupt(rl_player, action)
             if end_turn:
-                self.is_discard = not self.is_discard
+                self.game.is_discard = True
                 obs = self.get_observation()
                 done = self.game.game_over
                 return obs, done
 
-        if not self.game.game_over and not self.is_discard:
+        if not self.game.game_over and not self.game.is_discard:
             self.game.next_turn()
+            print("NEXT TURN")
             self.game.draw_tile(self.game.current_player)
-        self.is_discard = not self.is_discard
+
+        obs = self.get_observation()
+        done = self.game.game_over
+        return obs, done
+
+    def step_with_resolved_action(self, actioner_id: int, action: int) -> Tuple[np.ndarray, bool]:
+        """
+        Don't perform checks and force apply the action
+        :param actioner_id:
+        :param action:
+        :return:
+        """
+        actioning_player = self.game.players[actioner_id]
+        if self.game.is_discard:
+            self._step_our_discard(actioning_player, action)
+        elif action != 20:  # != MahjongActions.PASS:
+            end_turn = self._step_exact_interrupt(actioner_id, action)
+            if end_turn:
+                self.game.is_discard = True
+                obs = self.get_observation()
+                done = self.game.game_over
+                return obs, done
+
+        if not self.game.game_over and not self.game.is_discard:
+            self.game.next_turn()
+            print("NEXT TURN")
+            self.game.draw_tile(self.game.current_player)
         obs = self.get_observation()
         done = self.game.game_over
         return obs, done
@@ -144,8 +175,9 @@ class MahjongEnvironmentAdapter:
                 return None, None
         raise ValueError("Invalid action type")
 
-    def _step_discard(self, acting_player, action):
+    def _step_discard(self, acting_player_id, action):
         assert 0 <= action <= 14
+        acting_player = self.game.players[acting_player_id]
         tile_to_discard = acting_player.hidden_hand[action]
         self.game.discard_tile(acting_player, self.game.get_state(), tile=tile_to_discard)
 
@@ -155,32 +187,31 @@ class MahjongEnvironmentAdapter:
         """
         acting_player_index = -1
 
-        if self.is_discard:
+        if self.game.is_discard:
             for i in range(4):
                 if actions[i] != 20 and actions[i] is not None:
                     acting_player_index = i
                     break
             assert acting_player_index != -1
             acting_player = self.game.players[acting_player_index]
-            assert 0 <= actions[acting_player_index] <= 14
-            self._step_discard(acting_player, actions[acting_player_index])
+            assert 0 <= actions[acting_player_index][1] <= 14
+            self._step_discard(actions[acting_player_index][0], actions[acting_player_index][1])
         else:
             end_turn = self._step_player_interrupt(actions)
             if end_turn:
-                self.is_discard = not self.is_discard
-                obs = self.get_observation()
+                self.game.is_discard = True
                 done = self.game.game_over
                 return obs, done
 
-        if not self.game.game_over and not self.is_discard:
+        if not self.game.game_over and not self.game.is_discard:
             self.game.next_turn()
+            print("NEXT TURN")
             self.game.draw_tile(self.game.current_player)
-        self.is_discard = not self.is_discard
         obs = self.get_observation()
         done = self.game.game_over
         return obs, done
 
-    def _step_player_interrupt(self, actions) -> bool:
+    def _step_player_interrupt(self, actions: List[Tuple[int, MahjongActions]]) -> bool:
         # consider interrupts by other players
         actioning_player_id, action_to_execute = self.game.resolve_actions(actions)
         self.last_actioning_player = self.game.players[actioning_player_id]
@@ -198,6 +229,7 @@ class MahjongEnvironmentAdapter:
     def _step_our_discard(self, rl_player, action):
         tile_to_discard = rl_player.hidden_hand[action]
         self.game.discard_tile(rl_player, self.game.get_state(), tile=tile_to_discard)
+        self.game.is_discard = False
 
     def _step_other_player_interrupt(self, rl_player, action):
         # consider interrupts by other players
@@ -251,6 +283,19 @@ class MahjongEnvironmentAdapter:
         is_interrupted = self.game.execute_interrupt(actioning_player_id, action_to_execute, possible_indices)
 
         if not is_interrupted:
+            for player in self.game.players:
+                if len(player.hidden_hand) % 3 != 1 and not self.game.game_over:
+                    player.print_hand()
+                    raise ValueError("The players do not have the right number of tiles in hand")
+            return False
+        else:
+            return True
+
+    def _step_exact_interrupt(self, actioner_id, action):
+
+        is_interrupted = self.game.execute_interrupt(actioner_id, action)
+        if not is_interrupted:
+            # sanity check
             for player in self.game.players:
                 if len(player.hidden_hand) % 3 != 1 and not self.game.game_over:
                     player.print_hand()
