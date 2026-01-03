@@ -77,68 +77,213 @@ class MahjongEnvironmentAdapter:
         self.game.current_player = self.game.players[0]
         return self.get_observation()
 
+
     def step(self, action: int) -> Tuple[np.ndarray, bool]:
         """
-        Move the environment for a single step
+        Move the environment for a single step.
+        Alternates between DISCARD phase (is_discard=True) and INTERRUPT phase (is_discard=False).
+
+        DISCARD phase: Current player discards a tile
+        INTERRUPT phase: Other players respond to the discard (win/kong/pong/sheung/pass)
         """
         rl_player = self.game.players[self.controlling_player_id]
         assert isinstance(rl_player, RLAgent)
 
-        if self.game.current_player == rl_player and self.game.is_discard:
-            self._step_our_discard(rl_player, action)
-        elif self.game.current_player == rl_player and not self.game.is_discard:
-            end_turn = self._step_other_player_interrupt(rl_player, action)
-            if end_turn:
-                self.game.is_discard = True
-                obs = self.get_observation()
-                done = self.game.game_over
-                return obs, done
-        elif self.game.current_player != rl_player and self.game.is_discard:
-            # other players discard
-            state = self.game.get_state()
-            self.game.discard_tile(self.game.current_player, state)
+        # ==================== DISCARD PHASE ====================
+        if self.game.is_discard:
+            # Handle discard by current player
+            if self.game.current_player == rl_player:
+                # RL player discards
+                self._step_our_discard(rl_player, action)
+            else:
+                # Other player discards
+                state = self.game.get_state()
+                self.game.discard_tile(self.game.current_player, state)
+
+            # Transition to interrupt phase
+            self.game.is_discard = False
+            obs = self.get_observation()
+            done = self.game.game_over
+            return obs, done
+
+        # ==================== INTERRUPT PHASE ====================
         else:
-            end_turn = self._step_our_interrupt(rl_player, action)
+            # Determine who handles the interrupt
+            if self.game.current_player == rl_player:
+                # RL player just discarded, other players respond
+                end_turn = self._step_other_player_interrupt(rl_player, action)
+            else:
+                # Other player discarded, RL player responds
+                end_turn = self._step_our_interrupt(rl_player, action)
+
             if end_turn:
+                # Someone interrupted with kong/pong/sheung/win
+                # The interrupt handler already updated game state
+                # Just transition back to discard phase
                 self.game.is_discard = True
-                obs = self.get_observation()
-                done = self.game.game_over
-                return obs, done
+            else:
+                # Everyone passed, no interrupt
+                # Advance to next player and draw tile
+                self.game.is_discard = True
+                self.game.next_turn()
+                if not self.game.game_over:
+                    self.game.draw_tile(self.game.current_player)
 
-        if not self.game.game_over and not self.game.is_discard:
-            self.game.next_turn()
-            print("NEXT TURN")
-            self.game.draw_tile(self.game.current_player)
-
-        obs = self.get_observation()
-        done = self.game.game_over
-        return obs, done
+            obs = self.get_observation()
+            done = self.game.game_over
+            return obs, done
 
     def step_with_resolved_action(self, actioner_id: int, action: int) -> Tuple[np.ndarray, bool]:
         """
-        Don't perform checks and force apply the action
-        :param actioner_id:
-        :param action:
+        Force apply the action without performing checks.
+        Follows the same discard/interrupt phase pattern.
+
+        :param actioner_id: The player performing the action
+        :param action: The action to perform (0-13 for discard, 14-20 for claims)
         :return:
         """
         actioning_player = self.game.players[actioner_id]
-        if self.game.is_discard:
-            self._step_our_discard(actioning_player, action)
-        elif action != 20:  # != MahjongActions.PASS:
-            end_turn = self._step_exact_interrupt(actioner_id, action)
-            if end_turn:
-                self.game.is_discard = True
-                obs = self.get_observation()
-                done = self.game.game_over
-                return obs, done
 
-        if not self.game.game_over and not self.game.is_discard:
-            self.game.next_turn()
-            print("NEXT TURN")
-            self.game.draw_tile(self.game.current_player)
-        obs = self.get_observation()
-        done = self.game.game_over
-        return obs, done
+        # ==================== DISCARD PHASE ====================
+        if self.game.is_discard:
+            # Action must be a discard (0-13)
+            assert 0 <= action <= 13, f"Expected discard action (0-13), got {action}"
+            self._step_discard(actioner_id, action)
+
+            # Transition to interrupt phase
+            self.game.is_discard = False
+            obs = self.get_observation()
+            done = self.game.game_over
+            return obs, done
+
+        # ==================== INTERRUPT PHASE ====================
+        else:
+            if action == MahjongActions.PASS:
+                # Everyone passed, advance turn
+                self.game.is_discard = True
+                self.game.next_turn()
+                if not self.game.game_over:
+                    self.game.draw_tile(self.game.current_player)
+            else:
+                # Someone interrupted
+                end_turn = self._step_exact_interrupt(actioner_id, action)
+                self.game.is_discard = True
+
+                if not end_turn:
+                    # Interrupt didn't end turn (shouldn't happen with resolved actions)
+                    self.game.next_turn()
+                    if not self.game.game_over:
+                        self.game.draw_tile(self.game.current_player)
+
+            obs = self.get_observation()
+            done = self.game.game_over
+            return obs, done
+
+    def step_with_resolved_action(self, actioner_id: int, action: int) -> Tuple[np.ndarray, bool]:
+        """
+        Force apply the action without performing checks.
+        Follows the same discard/interrupt phase pattern.
+
+        :param actioner_id: The player performing the action
+        :param action: The action to perform (0-13 for discard, 14-20 for claims)
+        :return: Observation and done flag
+        """
+        actioning_player = self.game.players[actioner_id]
+
+        # ==================== DISCARD PHASE ====================
+        if self.game.is_discard:
+            # Action must be a discard (0-13)
+            assert 0 <= action <= 13, f"Expected discard action (0-13), got {action}"
+            self._step_discard(actioner_id, action)
+
+            # Transition to interrupt phase
+            self.game.is_discard = False
+            obs = self.get_observation()
+            done = self.game.game_over
+            return obs, done
+
+        # ==================== INTERRUPT PHASE ====================
+        else:
+            if action == MahjongActions.PASS:
+                # Everyone passed, advance turn
+                self.game.is_discard = True
+                self.game.next_turn()
+                if not self.game.game_over:
+                    self.game.draw_tile(self.game.current_player)
+            else:
+                # Someone interrupted
+                end_turn = self._step_exact_interrupt(actioner_id, action)
+                self.game.is_discard = True
+
+                if not end_turn:
+                    # Interrupt didn't end turn (shouldn't happen with resolved actions)
+                    self.game.next_turn()
+                    if not self.game.game_over:
+                        self.game.draw_tile(self.game.current_player)
+
+            obs = self.get_observation()
+            done = self.game.game_over
+            return obs, done
+
+    def step_with_all_actions(self, actions: List[Tuple[int, int]]) -> Tuple[np.ndarray, bool]:
+        """
+        Take in all players' actions for the current phase.
+
+        :param actions: List of (player_id, action) tuples for each player, in order
+        :return:
+        """
+        # ==================== DISCARD PHASE ====================
+        if self.game.is_discard:
+            # Find who is discarding
+            acting_player_index = -1
+            for i in range(4):
+                if actions[i] is not None and actions[i][1] != MahjongActions.PASS:
+                    acting_player_index = actions[i][0]
+                    break
+
+            assert acting_player_index != -1, "No valid discard action found"
+            assert acting_player_index == self.game.current_player_no, \
+                f"Expected current player {self.game.current_player_no} to discard, got {acting_player_index}"
+
+            action_value = actions[acting_player_index][1]
+            assert 0 <= action_value <= 13, f"Expected discard action (0-13), got {action_value}"
+
+            self._step_discard(acting_player_index, action_value)
+
+            # Transition to interrupt phase
+            self.game.is_discard = False
+            obs = self.get_observation()
+            done = self.game.game_over
+            return obs, done
+
+        # ==================== INTERRUPT PHASE ====================
+        else:
+            # Collect all non-pass actions
+            action_queue = []
+            for i in range(4):
+                if actions[i] is not None and actions[i][1] != MahjongActions.PASS:
+                    action_queue.append(actions[i])
+
+            if action_queue:
+                # Someone interrupted, resolve priority
+                end_turn = self._step_player_interrupt(action_queue)
+                self.game.is_discard = True
+
+                if not end_turn:
+                    # No actual interrupt executed, advance turn
+                    self.game.next_turn()
+                    if not self.game.game_over:
+                        self.game.draw_tile(self.game.current_player)
+            else:
+                # Everyone passed
+                self.game.is_discard = True
+                self.game.next_turn()
+                if not self.game.game_over:
+                    self.game.draw_tile(self.game.current_player)
+
+            obs = self.get_observation()
+            done = self.game.game_over
+            return obs, done
 
     def _map_int_to_action(self, player, action) -> Tuple[Optional[str], Optional[Tuple]]:
         if 0 <= action <= 13:
@@ -181,35 +326,41 @@ class MahjongEnvironmentAdapter:
         tile_to_discard = acting_player.hidden_hand[action]
         self.game.discard_tile(acting_player, self.game.get_state(), tile=tile_to_discard)
 
-    def step_with_all_actions(self, actions: List[Tuple[int, int]]) -> Tuple[np.ndarray, bool]:
-        """
-        Move the environment for a single step. Return the state and if terminal,
-        """
-        acting_player_index = -1
-
-        if self.game.is_discard:
-            for i in range(4):
-                if actions[i] != 20 and actions[i] is not None:
-                    acting_player_index = i
-                    break
-            assert acting_player_index != -1
-            acting_player = self.game.players[acting_player_index]
-            assert 0 <= actions[acting_player_index][1] <= 14
-            self._step_discard(actions[acting_player_index][0], actions[acting_player_index][1])
-        else:
-            end_turn = self._step_player_interrupt(actions)
-            if end_turn:
-                self.game.is_discard = True
-                done = self.game.game_over
-                return obs, done
-
-        if not self.game.game_over and not self.game.is_discard:
-            self.game.next_turn()
-            print("NEXT TURN")
-            self.game.draw_tile(self.game.current_player)
-        obs = self.get_observation()
-        done = self.game.game_over
-        return obs, done
+    # def step_with_all_actions(self, actions: List[Tuple[int, int]]) -> Tuple[np.ndarray, bool]:
+    #     """
+    #     Move the environment for a single step. Return the state and if terminal,
+    #     """
+    #     acting_player_index = -1
+    #
+    #     if self.game.is_discard:
+    #         for i in range(4):
+    #             if actions[i] != 20 and actions[i] is not None:
+    #                 acting_player_index = i
+    #                 break
+    #         assert acting_player_index != -1
+    #         acting_player = self.game.players[acting_player_index]
+    #         assert 0 <= actions[acting_player_index][1] <= 14
+    #         self._step_discard(actions[acting_player_index][0], actions[acting_player_index][1])
+    #         self.game.next_turn()
+    #         self.game.is_discard = False
+    #         obs = self.get_observation()
+    #         done = self.game.game_over
+    #         return obs, done
+    #
+    #     else:
+    #         end_turn = self._step_player_interrupt(actions)
+    #         if end_turn:
+    #             self.game.is_discard = True
+    #             done = self.game.game_over
+    #             return obs, done
+    #
+    #     if not self.game.game_over and not self.game.is_discard:
+    #         self.game.next_turn()
+    #         print("NEXT TURN")
+    #         self.game.draw_tile(self.game.current_player)
+    #     obs = self.get_observation()
+    #     done = self.game.game_over
+    #     return obs, done
 
     def _step_player_interrupt(self, actions: List[Tuple[int, MahjongActions]]) -> bool:
         # consider interrupts by other players
@@ -244,9 +395,9 @@ class MahjongEnvironmentAdapter:
                                                       self.game.current_player_no)
                 if queued_action is not None:
                     action_queue.append(queued_action)
-        actioning_player_id, action_to_execute, possible_indices = self.game.resolve_actions(action_queue)
+        actioning_player_id, action_to_execute = self.game.resolve_actions(action_queue)
 
-        is_interrupted = self.game.execute_interrupt(actioning_player_id, action_to_execute, possible_indices)
+        is_interrupted = self.game.execute_interrupt(actioning_player_id, action_to_execute)
         if not is_interrupted:
             # sanity check
             for player in self.game.players:
