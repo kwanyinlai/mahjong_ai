@@ -10,13 +10,11 @@ from mahjong_environment.player import Player
 from mahjong_environment.tile import MahjongTile
 
 
-
-
 class MahjongGame:
     """
     Represents one Mahjong Game
     """
-    state_size = 919
+    state_size = 920
     tiles: List[MahjongTile]
     players: List[Player]
     current_player_no: int
@@ -27,11 +25,12 @@ class MahjongGame:
     game_over: bool
     last_acting_player: Player = None
     last_action: MahjongActions
-    winner: Player = None
+    winner: Optional[Player] = None
     log: List[Dict]
-    circle_wind: str
+    circle_wind: str = 'east'
+    is_discard: bool = True
 
-    def __init__(self, players: List[Player], circle_wind):
+    def __init__(self, players: List[Player], circle_wind: str):
         ordered_players = []
         i = 0
         while i < 4:
@@ -176,7 +175,6 @@ class MahjongGame:
         :param player: the player who is drawing
         :return: the drawn tile
         """
-
         self.last_acting_player = player
         drawn_tile = self.tiles.pop()
         state = self.get_state()
@@ -216,7 +214,7 @@ class MahjongGame:
             state = self.get_state()
             while Player.decide_add_kong(player, drawn_tile, state) and player.decide_add_kong(drawn_tile,
                                                                                                state) and len(
-                    self.tiles) > 0:
+                self.tiles) > 0:
                 for _ in range(3):
                     self.players[self.current_player_no].hidden_hand.remove(drawn_tile)
 
@@ -261,7 +259,7 @@ class MahjongGame:
 
         return self.resolve_actions(action_queue)
 
-    def execute_interrupt(self, actioning_player_id: Optional[int], action_to_execute: Optional[str]) -> bool:
+    def execute_interrupt(self, actioning_player_id: Optional[int], action_to_execute: Optional[int]) -> bool:
         """
         Execute the interrupt if the action is not None, and return whether any
         action was executed.
@@ -316,37 +314,20 @@ class MahjongGame:
                 for _ in range(2):
                     actioning_player.hidden_hand.remove(self.latest_tile)
                 actioning_player.revealed_sets.append([self.latest_tile] * 3)
-                self.log.append({
-                    "player_id": actioning_player.player_id,
-                    "state": state,
-                    "action_type": "pong",
-                    "is_claim": True,
-                    "reward": 0.0,
-                    "gameover": False
-                })
                 self.current_player_no = actioning_player.player_order
                 self.current_player = self.players[self.current_player_no]
                 self.last_action = MahjongActions.PONG
                 return True
-            elif action_to_execute in {MahjongActions.LOWER_SHEUNG,
-                                       MahjongActions.UPPER_SHEUNG,
-                                       MahjongActions.MIDDLE_SHEUNG}:
+            elif 17 <= action_to_execute <= 19:
                 print(f"Sheung is called by Player {actioning_player_id}")
-                indices = self._find_indices(action_to_execute, executing_player=self.players[actioning_player_id])
+                indices = self.find_indices(action_to_execute, executing_player=self.players[actioning_player_id])
                 i1, i2 = sorted(indices, reverse=True)
 
                 sheung_tile_1 = actioning_player.hidden_hand.pop(i1)
                 sheung_tile_2 = actioning_player.hidden_hand.pop(i2)
 
                 actioning_player.revealed_sets.append([sheung_tile_1, sheung_tile_2, self.latest_tile])
-                self.log.append({
-                    "player_id": actioning_player.player_id,
-                    "state": state,
-                    "action_type": "sheung",
-                    "is_claim": True,
-                    "reward": 0.0,
-                    "gameover": False
-                })
+
                 self.current_player_no = actioning_player.player_order
                 self.current_player = self.players[self.current_player_no]
                 self.last_action = MahjongActions.UPPER_SHEUNG  # doesn't matter what the action is, just that it is a
@@ -375,14 +356,6 @@ class MahjongGame:
             player.hidden_hand.remove(tile)
             player.discard_pile.append(tile)
             self.latest_tile = tile
-            self.log.append({
-                "player_id": self.current_player.player_id,
-                "state": state,
-                "action_type": "discard",
-                "is_claim": True,
-                "reward": 0.0,
-                "gameover": False
-            })
             return
 
         discarded_tile = player.discard_tile(state)
@@ -568,6 +541,8 @@ class MahjongGame:
         if self.last_acting_player is not None:
             last_acting_player_vec[self.last_acting_player.player_id] = 1.0  # 4
 
+        is_discard_vec = np.array([float(self.is_discard)], dtype=np.float32)
+
         state = np.concatenate([
             player_states_vec,
             latest_tile_vec,
@@ -575,7 +550,8 @@ class MahjongGame:
             tiles_remaining,
             current_turn,
             circle_wind_vec,
-            last_acting_player_vec
+            last_acting_player_vec,
+            is_discard_vec
         ])
 
         return state
@@ -752,7 +728,8 @@ class MahjongGame:
         """
 
     @staticmethod
-    def reconstruct_game(state: np.ndarray) -> MahjongGame:
+    def reconstruct_game(state: np.ndarray, injected_decision_model: Optional[MahjongModel] = None) -> Tuple[
+        MahjongGame, bool]:
         """
         Reconstruct a MahjongGame from the given state array.
 
@@ -760,31 +737,44 @@ class MahjongGame:
         :return: A new MahjongGame instance reconstructed from the state.
         """
         players = []
-        # Step 1: Rebuild player states
-        player_states_vec = state[:868]  # First 868 values correspond to all player states
+        player_states_vec = state[:868]  # 217 * 4 = 868 values correspond to all player states
 
-        # Reconstruct each player's state from the player states vector (each player has 217 state elements)
+        total_tiles = np.zeros(34, dtype=np.float32)  # 34
+        # 217 size state
         for i in range(4):
             player_start_index = i * 217
             player_end_index = (i + 1) * 217
             player_state = player_states_vec[player_start_index:player_end_index]
+            # total_tiles += player_state[: 34]
+            #
+            # total_tiles += player_state[34: 34 * 2]
+            # total_tiles += player_state[34 * 2: 34 * 3]
+            # total_tiles += player_state[34 * 3: 34 * 4]
+            # total_tiles += player_state[34 * 4: 34 * 5]
+            #
+            # total_tiles += player_state[34 * 5:34 * 6]
 
             player = Player.player_from_player_state(
                 player_state, i, i
             )
             players.append(player)
-
+        assert all(tile <= 4.0 for tile in total_tiles), "Invalid tile counts detected during reconstruction."
+        # print(total_tiles)
         latest_tile_vec = state[868:902]
-        latest_tile_index = np.argmax(latest_tile_vec)
-        latest_tile = MahjongTile.index_to_tile(
-            int(latest_tile_index)
-        )
+        if all(latest_tile == 0.0 for latest_tile in latest_tile_vec):
+            latest_tile = None
+        else:
+            latest_tile_index = np.argmax(latest_tile_vec)
+            latest_tile = MahjongTile.index_to_tile(
+                int(latest_tile_index)
+            )
+
 
         discarding_player_vec = state[902:906]
         discarding_player_id = np.argmax(discarding_player_vec)
         discarding_player = players[discarding_player_id]
 
-        tiles_remaining = int(state[906] * 144)
+        tiles_remaining = int(state[906] * 144)  # might be redundant information??
 
         current_turn_vec = state[907:911]
         current_player_id = np.argmax(current_turn_vec)
@@ -799,18 +789,76 @@ class MahjongGame:
         last_acting_player_vec = state[915:919]
         last_acting_player_index = np.argmax(last_acting_player_vec)
         last_acting_player = players[last_acting_player_index]
+        is_discard = bool(state[919:920][0])
 
-        game = MahjongGame(players=players, circle_wind=circle_wind)
+        game = object.__new__(MahjongGame)
 
         game.players = players
 
         game.tiles = MahjongGame.initialize_tiles()
-        for player in game.players:
+        # for player in game.players:
+        #     for tile in player.hidden_hand:
+        #         game.tiles.remove(tile)
+        #     for tile_set in player.revealed_sets:
+        #         for tile in tile_set:
+        #             game.tiles.remove(tile)
+
+        # print(f"\nInitial tile pool size: {len(game.tiles)}")
+
+        # Track what we're removing
+        tiles_to_remove = []
+
+        all_discarded = []
+
+        for player_idx, player in enumerate(game.players):
+            # print(f"\nPlayer {player_idx}:")
+            # print(f"  Hidden hand: {len(player.hidden_hand)} tiles")
+            # print(f"  Revealed sets: {sum(len(s) for s in player.revealed_sets)} tiles")
+            # print(f"  Flowers: {len(player.flowers)} tiles")
+            # print(f"  Discard pile: {len(player.discard_pile)} tiles")
+
+            # Hidden hand
             for tile in player.hidden_hand:
-                game.tiles.remove(tile)
+                tiles_to_remove.append(('hidden', player_idx, tile))
+
+            # Revealed sets
             for tile_set in player.revealed_sets:
                 for tile in tile_set:
-                    game.tiles.remove(tile)
+                    tiles_to_remove.append(('revealed', player_idx, tile))
+
+            # Flowers
+            for flower in player.flowers:
+                tiles_to_remove.append(('flower', player_idx, flower))
+
+            # Discard pile
+            for tile in player.discard_pile:
+                tiles_to_remove.append(('discard', player_idx, tile))
+                all_discarded.append(tile)
+
+        # Now try to remove tiles and catch the problematic one
+        for source, player_idx, tile in tiles_to_remove:
+            try:
+                game.tiles.remove(tile)
+            except ValueError:
+                print(f"\n!!! ERROR: Cannot remove tile from {source} of player {player_idx}")
+                print(f"    Tile: {tile}")
+                print(f"    Tile details: type={tile.tiletype}, subtype={tile.subtype}, numchar={tile.numchar}")
+
+                # Check if any similar tiles exist
+                matching_tiles = [t for t in game.tiles if t == tile]
+                print(f"    Matching tiles in pool: {len(matching_tiles)}")
+
+                # Count this tile type
+                tile_count = sum(1 for t in game.tiles if t.tiletype == tile.tiletype
+                                 and t.subtype == tile.subtype and t.numchar == tile.numchar)
+                print(f"    This tile type count in pool: {tile_count}")
+
+                # Show total tiles remaining
+                print(f"    Total tiles in pool: {len(game.tiles)}")
+
+                raise
+
+        # print(f"\nFinal tile pool size: {len(game.tiles)}")
 
         game.current_player = current_player
         game.current_player_no = current_player.player_order
@@ -818,10 +866,14 @@ class MahjongGame:
         game.discarding_player = discarding_player
         game.game_over = False
         game.last_acting_player = last_acting_player
+        game.circle_wind = 'east'  # circle_wind
 
-        return game
+        game.is_discard = is_discard
+        game.discarded_tiles = []
 
-    def _find_indices(self, action_to_execute: MahjongActions, executing_player: Player):
+        return game, is_discard
+
+    def find_indices(self, action_to_execute: MahjongActions, executing_player: Player):
         """
         Action must be a SHEUNG action. Return the indices of the two other tiles making up the
         sheung
@@ -844,3 +896,14 @@ class MahjongGame:
             tile2 = MahjongTile(tiletype=self.latest_tile.tiletype, subtype=self.latest_tile.subtype,
                                 numchar=self.latest_tile.numchar + 2)
         return executing_player.hidden_hand.index(tile1), executing_player.hidden_hand.index(tile2)
+
+    def find_legal_transitions(self):
+        legal_actions_by_player = [self.get_legal_actions(
+            discard_turn=self.is_discard,
+            our_turn=player == self.current_player,
+            player=player)
+            for player in self.players
+        ]
+        for i in range(4):
+            legal_actions_by_player[i].pop()  # remove the PASS option for everyone
+        return [(i, legal_actions_by_player[i][j]) for i in range(4) for j in range(len(legal_actions_by_player[i]))]
