@@ -326,42 +326,6 @@ class MahjongEnvironmentAdapter:
         tile_to_discard = acting_player.hidden_hand[action]
         self.game.discard_tile(acting_player, self.game.get_state(), tile=tile_to_discard)
 
-    # def step_with_all_actions(self, actions: List[Tuple[int, int]]) -> Tuple[np.ndarray, bool]:
-    #     """
-    #     Move the environment for a single step. Return the state and if terminal,
-    #     """
-    #     acting_player_index = -1
-    #
-    #     if self.game.is_discard:
-    #         for i in range(4):
-    #             if actions[i] != 20 and actions[i] is not None:
-    #                 acting_player_index = i
-    #                 break
-    #         assert acting_player_index != -1
-    #         acting_player = self.game.players[acting_player_index]
-    #         assert 0 <= actions[acting_player_index][1] <= 14
-    #         self._step_discard(actions[acting_player_index][0], actions[acting_player_index][1])
-    #         self.game.next_turn()
-    #         self.game.is_discard = False
-    #         obs = self.get_observation()
-    #         done = self.game.game_over
-    #         return obs, done
-    #
-    #     else:
-    #         end_turn = self._step_player_interrupt(actions)
-    #         if end_turn:
-    #             self.game.is_discard = True
-    #             done = self.game.game_over
-    #             return obs, done
-    #
-    #     if not self.game.game_over and not self.game.is_discard:
-    #         self.game.next_turn()
-    #         print("NEXT TURN")
-    #         self.game.draw_tile(self.game.current_player)
-    #     obs = self.get_observation()
-    #     done = self.game.game_over
-    #     return obs, done
-
     def _step_player_interrupt(self, actions: List[Tuple[int, MahjongActions]]) -> bool:
         # consider interrupts by other players
         actioning_player_id, action_to_execute = self.game.resolve_actions(actions)
