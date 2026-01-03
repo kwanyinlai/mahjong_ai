@@ -19,8 +19,16 @@ merely a byproduct of the 'nicheness' of the game of Mahjong. Nevertheless, I am
 - [ ] Create RL bot pre-trained on full/perfect information
 * - [x] Define RL interface for bots to implement their own strategies
 * - [x] Return encoded game state to the interface to enabled state-based decisions
-* - [ ] Adapt current environment to be compatible in with Gymnasium
-* - [ ] Implement the required Gymnasium methods
+* - [x] Get legal actions and transitions from particular game states
+* - [x] Create adapter to allow our MahjongGame class to take in actions sequentially and simultaneously
+* - [x] Enable recreation of MahjongGame(s) from their game states
+* - [x] Add additional attributes to our MahjongGame class as necessary and our state encoding
+* - [x] Add neural network guided searching using a policy-value network (with policy-value heads)
+* - [x] Centralise a shared neural network to enable self play using a MahjongModel class
+* - [x] Create experience buffers and batches to enable training of model
+* - [x] Policy gradient and value gradient for learning
+* - [x] Integrate Monte-Carlo Tree Search to better guide searches
+* - [ ] Iron out bugs with reconstructing game states (CURRENTLY WORKING ON)
 * (...) more to come
 - [ ] Knowledge distillation to transfer from full to partial information (to reflect real-world Mahjong game)
 - [ ] Play test???
