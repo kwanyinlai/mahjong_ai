@@ -590,8 +590,9 @@ class Player:
         revealed_sets_vec = player_state[34:34 * 5]
         player.revealed_sets = Player.create_revealed_sets(revealed_sets_vec)
 
-        discarded_pile_vec = player_state[34 * 5:34 * 6]
+        discarded_pile_vec = player_state[34 * 5: 34 * 6]
         player.discard_pile = Player.create_tile_pile(discarded_pile_vec)
+        player.hidden_hand.sort()
 
         flower_vec = player_state[34 * 6:34 * 6 + 8]
         player.flowers = Player.create_flowers(flower_vec)
@@ -607,7 +608,7 @@ class Player:
         """
         hand = []
         for i in range(34):
-            count = int(hand_vec[i] * 4)
+            count = int(round(hand_vec[i] * 4))
             for _ in range(count):
                 tile = MahjongTile.index_to_tile(i)
                 hand.append(tile)
@@ -633,7 +634,7 @@ class Player:
         flower_mapping = {0: 'plum', 1: 'orchid', 2: 'chrysanthemum', 3: 'bamboo',
                           4: 'summer', 5: 'spring', 6: 'autumn', 7: 'winter'}
         for i in range(8):
-            count = int(flower_vec[i] * 4)  # Reverse the normalization
+            count = int(flower_vec[i])  # Reverse the normalization
             for _ in range(count):
                 if flower_mapping[i] in {'plum', 'orchid', 'chrysanthemum', 'bamboo'}:
                     flower = MahjongTile(tiletype='flower', subtype='flower', numchar=flower_mapping[i])
