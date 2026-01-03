@@ -29,6 +29,7 @@ merely a byproduct of the 'nicheness' of the game of Mahjong. Nevertheless, I am
 * - [x] Policy gradient and value gradient for learning
 * - [x] Integrate Monte-Carlo Tree Search to better guide searches
 * - [ ] Iron out bugs with reconstructing game states (CURRENTLY WORKING ON)
+* - [ ] Add state determinisation from public information, and masking of hidden information based on spectator perspective
 * (...) more to come
 - [ ] Knowledge distillation to transfer from full to partial information (to reflect real-world Mahjong game)
 - [ ] Play test???
