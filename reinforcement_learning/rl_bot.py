@@ -22,7 +22,7 @@ class RLAgent(Player):
         :param observation:
         :return:
         """
-        return self.decision_model.select_action(observation, legal_actions)
+        return self.decision_model.select_action(observation, legal_actions, self.player_id)
 
     def push_experience(self, experience: Tuple[np.ndarray, int, float]):
         """

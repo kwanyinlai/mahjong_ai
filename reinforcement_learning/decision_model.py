@@ -7,6 +7,7 @@ import random
 import numpy as np
 from collections import deque
 
+from reinforcement_learning.montecarlo_sampling import MonteCarloTreeSearch
 from reinforcement_learning.neural_network import PolicyValueNetwork
 
 
@@ -28,13 +29,29 @@ class MahjongModel:
         self.replay_buffer = deque(maxlen=max_buffer_size)
         self.optimizer = optim.Adam(self.network.parameters(), lr=learning_rate)
 
-    def select_action(self, observation: np.ndarray, legal_actions: List[int]) -> int:
+    def select_action(self, observation: np.ndarray, legal_actions: List[int], player_id: int) -> int:
         """
 
         :param observation: masked observation from public state (with hidden public information)
         :param legal_actions: set of legal actions that can be made (MahjongActions)
         :return: the integer corresponding to the MahjongActions enumerator
         """
+        mcts = MonteCarloTreeSearch(
+            player_id=player_id,
+            network=self.network,
+            num_simulations=100,
+            c_puct=1.0
+        )
+
+        # must take unmasked observation
+        best_action = mcts.search(
+            root_state=observation,
+            player_id=player_id
+        )
+
+        return best_action
+
+        # TODO: mask observation for direct sampling
         # observation to tensor
         obs_tensor = torch.tensor(observation, dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():  # no learning just selecting
