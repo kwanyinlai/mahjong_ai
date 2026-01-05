@@ -362,6 +362,7 @@ class MahjongEnvironmentAdapter:
         actioning_player_id, action_to_execute = self.game.resolve_actions(action_queue)
 
         is_interrupted = self.game.execute_interrupt(actioning_player_id, action_to_execute)
+
         if not is_interrupted:
             # sanity check
             for player in self.game.players:

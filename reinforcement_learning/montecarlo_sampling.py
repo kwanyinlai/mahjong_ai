@@ -204,6 +204,7 @@ class MonteCarloTreeSearch:
         Guided rollout using policy
         """
         for _ in range(depth):
+            assert all(element <= 1 for element in current_state)
             game, is_discard = MahjongGame.reconstruct_game(current_state)
             legal_transitions = game.find_legal_transitions()
 
