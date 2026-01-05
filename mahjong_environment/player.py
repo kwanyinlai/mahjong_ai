@@ -495,6 +495,10 @@ class Player:
         """
         bisect.insort(self.hidden_hand, drawn_tile)
 
+    def all_tiles(self):
+        tile_str = [str(tile) for tile in (self.hidden_hand + [tile for set in self.revealed_sets for tile in set])]
+        print(f"PLAYER {self.player_id}, {tile_str}")
+
     def print_hand(self):
         """
         Print out currnet hand
@@ -592,7 +596,6 @@ class Player:
 
         discarded_pile_vec = player_state[34 * 5: 34 * 6]
         player.discard_pile = Player.create_tile_pile(discarded_pile_vec)
-        player.hidden_hand.sort()
 
         flower_vec = player_state[34 * 6:34 * 6 + 8]
         player.flowers = Player.create_flowers(flower_vec)
