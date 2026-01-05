@@ -44,8 +44,10 @@ class Training:
             state = env.reset()  # Reset the environment at the start of each episode
             done = False
             prev_scores = [player.score for player in players]
-
+            turn_no = 1  # for debugging only
             while not done and len(env.game.tiles) > 0:
+                print(f"=================TURN {turn_no}===================")
+                print(f"It is player {env.game.current_player_no}'s turn to discard")
                 # ====================== ====================== ======================
                 # ====================== DISCARD PHASE ===========================
                 # ====================== ====================== ======================
@@ -60,10 +62,25 @@ class Training:
                 selected_actions = [(i, MahjongActions(player.select_actions(legal_actions[i], state)))
                                     for i, player in enumerate(players)]
                 # TODO: Mask public state before passing to decision model
+                for i in range(4):
+                    if selected_actions[i][1] == 20:
+                        continue
+                    print(f"Player {i} chose action {MahjongActions(selected_actions[i][1])}")
+                    print(f"Player {i}'s hand before is:")
+                    print([str(tile) for tile in env.game.current_player.hidden_hand])
+                    print("Discard pile is:")
+                    print([str(tile) for tile in env.game.current_player.discard_pile])
                 next_state, done = env.step_with_all_actions(selected_actions)
+
                 env.game.is_discard = False
                 for i in range(4):
-                    print(f"Player {i} chose action {MahjongActions(selected_actions[i][1])}")
+                    if selected_actions[i][1] == 20:
+                        continue
+                    print(f"The tile {env.game.latest_tile} was discarded")
+                    print(f"Player {i}'s after hand is:")
+                    print([str(tile) for tile in env.game.current_player.hidden_hand])
+                    print("Discard pile is:")
+                    print([str(tile) for tile in env.game.current_player.discard_pile])
 
                 if env.game.last_acting_player is not None:
                     actioning_player_id = env.game.last_acting_player.player_id
@@ -88,9 +105,13 @@ class Training:
 
                 next_state, done = env.step_with_all_actions(selected_actions)
                 env.game.is_discard = True
-                print(selected_actions)
-                for i in range(4):
-                    print(f"Player {i} chose action {MahjongActions(selected_actions[i][1])}")
+
+                print(f"Respond to discard")
+                # print(selected_actions)
+                if all(action[1] == 20 for action in selected_actions):
+                    print("No response")
+                else:
+                    print(f"Player {env.game.last_acting_player.player_id} interrupted with {env.game.last_action}")
 
                 if env.game.last_acting_player is not None:
                     actioning_player_id = env.game.last_acting_player.player_id
@@ -102,6 +123,7 @@ class Training:
                     continue
 
                 done = env.game.game_over
+                turn_no += 1
             print("WIN? " + str(env.game.game_over))
             #  TODO: check if our game is terminating properly. we aren't getting any messages
             #  TODO: about a game draw even though the game terminates this way
