@@ -271,6 +271,10 @@ class MahjongGame:
 
         if actioning_player_id is not None:
             state = self.get_state()
+
+            if 15 <= action_to_execute <= 19:  # if the interrupt is not a win claim
+                self.last_acting_player.discard_pile.pop()  # we stole the tile so remove from discard pile
+
             actioning_player = self.players[actioning_player_id]
             self.last_acting_player = actioning_player
             for player in self.players:
@@ -317,13 +321,14 @@ class MahjongGame:
                 # sheung
 
                 self.is_discard = True
+
                 return True
         return False
 
     def discard_tile(self, player: Player, state: np.ndarray = None, tile=None):
         """
         Add the latest tile to the discarded pile and set the latest discarded tile
-        to the given tile. Update the game log as necessary.
+        to the given tile.
 
         :param player: the player who discarded the tile
         :param state: the current game state
@@ -332,40 +337,25 @@ class MahjongGame:
         if tile is not None:
             self.discarded_tiles.append(tile)
             self.discarding_player = player
-
             # print(f"Player {player.player_id} discarded {tile}")
-
             self.last_acting_player = player
-            self.last_action = MahjongActions.DISCARD_TILE_1
-            # doesn't matter what kind of discard, just that it is a discard
-
+            self.last_action = MahjongActions.DISCARD_TILE_1  # doesn't matter what kind of discard, just that it is a discard
             player.hidden_hand.remove(tile)
             player.discard_pile.append(tile)
             self.latest_tile = tile
-            return
+        else:
+            discarded_tile = player.discard_tile(state)
+            self.latest_tile = discarded_tile
+            self.discarded_tiles.append(discarded_tile)
+            self.discarding_player = player
+            self.last_acting_player = player
+            self.last_action = MahjongActions.DISCARD_TILE_1  # doesn't matter what kind of discard, just that it is a discard
+            player.hidden_hand.remove(discarded_tile)
+            player.discard_pile.append(discarded_tile)
 
-        discarded_tile = player.discard_tile(state)
-        self.latest_tile = discarded_tile
-        self.discarded_tiles.append(discarded_tile)
-        self.discarding_player = player
-
-        self.last_acting_player = player
-        self.last_action = MahjongActions.DISCARD  # doesn't matter what kind of discard, just that it is a discard
-
-        # print(f"Player {player.player_id} discarded {discarded_tile}")
-        player.hidden_hand.remove(discarded_tile)
-        player.discard_pile.append(discarded_tile)
-        self.log.append({
-            "player_id": self.current_player.player_id,
-            "state": state,
-            "action_type": "discard",
-            "is_claim": True,
-            "reward": 0.0,
-            "gameover": False
-        })
-        if len(player.revealed_sets) * 3 + len(player.hidden_hand) != 13:
-            player.print_hand()
-            raise ValueError
+            if len(player.revealed_sets) * 3 + len(player.hidden_hand) != 13:
+                player.print_hand()
+                raise ValueError
 
     def next_turn(self, player_skip: int = None):
         """
@@ -722,6 +712,7 @@ class MahjongGame:
         :param state: A numpy array representing the game state.
         :return: A new MahjongGame instance reconstructed from the state.
         """
+        game = object.__new__(MahjongGame)
         players = []
         player_states_vec = state[:868]  # 217 * 4 = 868 values correspond to all player states
 
@@ -731,20 +722,29 @@ class MahjongGame:
             player_start_index = i * 217
             player_end_index = (i + 1) * 217
             player_state = player_states_vec[player_start_index:player_end_index]
-            # total_tiles += player_state[: 34]
-            #
-            # total_tiles += player_state[34: 34 * 2]
-            # total_tiles += player_state[34 * 2: 34 * 3]
-            # total_tiles += player_state[34 * 3: 34 * 4]
-            # total_tiles += player_state[34 * 4: 34 * 5]
-            #
-            # total_tiles += player_state[34 * 5:34 * 6]
+            total_tiles += player_state[: 34]  # hidden hand
+
+            total_tiles += player_state[34: 34 * 2]   # revealed_set 1
+            total_tiles += player_state[34 * 2: 34 * 3]  # revealed_set 2
+            total_tiles += player_state[34 * 3: 34 * 4]  # revealed_set 3
+            total_tiles += player_state[34 * 4: 34 * 5]  # revealed_set 4
+
+            total_tiles += player_state[34 * 5: 34 * 6]  # discarded_pile
+
+            assert len(total_tiles) <= 50
 
             player = Player.player_from_player_state(
                 player_state, i, i
             )
+
             players.append(player)
-        assert all(tile <= 4.0 for tile in total_tiles), "Invalid tile counts detected during reconstruction."
+            player_state_regenerated = game.get_player_state(player)
+            assert all(player_state_regenerated[i] == player_state[i] for i in range(len(player_state_regenerated) - 5))
+        # for i in range(len(total_tiles)):
+        #     if total_tiles[i] > 1.0:
+        #         print(f"ERROR TILE {i}")
+        #         assert all(tile <= 1.0 for tile in total_tiles), "Invalid tile counts detected during reconstruction." + str(tile)
+
         # print(total_tiles)
         latest_tile_vec = state[868:902]
         if all(latest_tile == 0.0 for latest_tile in latest_tile_vec):
@@ -777,11 +777,19 @@ class MahjongGame:
         last_acting_player = players[last_acting_player_index]
         is_discard = bool(state[919:920][0])
 
-        game = object.__new__(MahjongGame)
+
 
         game.players = players
 
         game.tiles = MahjongGame.initialize_tiles()
+        assert len(game.tiles) == 144
+        tile_count = {}
+        for tile in game.tiles:
+            if tile in tile_count:
+                tile_count[tile] += 1
+            else:
+                tile_count[tile] = 1
+        # assert all(count == 4 or (count == 1 and tile.tiletype == 'flower') for tile, count in tile_count.items())
         # for player in game.players:
         #     for tile in player.hidden_hand:
         #         game.tiles.remove(tile)
@@ -814,6 +822,7 @@ class MahjongGame:
 
             # Flowers
             for flower in player.flowers:
+                assert flower.tiletype == 'flower'
                 tiles_to_remove.append(('flower', player_idx, flower))
 
             # Discard pile
@@ -821,12 +830,31 @@ class MahjongGame:
                 tiles_to_remove.append(('discard', player_idx, tile))
                 all_discarded.append(tile)
 
+        # assert len(tiles_to_remove) <= 144
+        for _, _, tile in tiles_to_remove:
+            tile_count[tile] -= 1
+        # assert all(count >= 0 for count in tile_count.values())
+
+        tile_count = {}
+        for _, _, tile in tiles_to_remove:
+            if tile not in tile_count:
+                tile_count[tile] = 1
+            else:
+                tile_count[tile] += 1
+
+        # assert all(count <= 4 for count in tile_count.values())
+
         # Now try to remove tiles and catch the problematic one
+        removed_tiles_so_far = 0
         for source, player_idx, tile in tiles_to_remove:
             try:
+                removed_tiles_so_far += 1
                 game.tiles.remove(tile)
             except ValueError:
                 print(f"\n!!! ERROR: Cannot remove tile from {source} of player {player_idx}")
+                print(f"    Latest tile: {game.latest_tile}")
+                for player in game.players:
+                    player.all_tiles()
                 print(f"    Tile: {tile}")
                 print(f"    Tile details: type={tile.tiletype}, subtype={tile.subtype}, numchar={tile.numchar}")
 
@@ -841,6 +869,7 @@ class MahjongGame:
 
                 # Show total tiles remaining
                 print(f"    Total tiles in pool: {len(game.tiles)}")
+                print(f"    Total tiles removed so far: {removed_tiles_so_far}")
 
                 raise
 
