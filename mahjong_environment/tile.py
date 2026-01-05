@@ -55,7 +55,7 @@ class MahjongTile:
         return self.tiletype == other.tiletype and self.subtype == other.subtype and self.numchar == other.numchar
 
     def __str__(self):
-        return self.tiletype + self.subtype + str(self.numchar)
+        return self.subtype + str(self.numchar)
 
     def __lt__(self, other: MahjongTile):
         suit_order = {'circle': 0, 'bamboo': 1, 'number': 2, 'wind': 3, 'dragon': 4, 'flower': 5, 'season': 6}
