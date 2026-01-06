@@ -96,6 +96,11 @@ class MahjongModel:
         states = torch.tensor(np.array(states), dtype=torch.float32)
 
         actions = torch.tensor(actions, dtype=torch.long)
+        """
+          File "{REDACTED}/mahjong_ai/reinforcement_learning/decision_model.py", line 98, in update_model
+            actions = torch.tensor(actions, dtype=torch.long)
+        TypeError: 'tuple' object cannot be interpreted as an integer
+        """
 
         values = torch.tensor(values, dtype=torch.float32)
 

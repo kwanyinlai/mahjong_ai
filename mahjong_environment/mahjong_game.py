@@ -272,8 +272,9 @@ class MahjongGame:
         if actioning_player_id is not None:
             state = self.get_state()
 
-            if 15 <= action_to_execute <= 19:  # if the interrupt is not a win claim
-                self.last_acting_player.discard_pile.pop()  # we stole the tile so remove from discard pile
+            if 15 <= action_to_execute <= 19:  # if the interrupt is not a win claim (MahjongActions.WIN = 20)
+                self.last_acting_player.discard_pile.remove(self.latest_tile)  # we stole the tile so remove from discard pile
+
 
             actioning_player = self.players[actioning_player_id]
             self.last_acting_player = actioning_player
@@ -922,3 +923,12 @@ class MahjongGame:
         for i in range(4):
             legal_actions_by_player[i].pop()  # remove the PASS option for everyone
         return [(i, legal_actions_by_player[i][j]) for i in range(4) for j in range(len(legal_actions_by_player[i]))]
+
+    def get_visible_tiles(self, player_id: int):
+        visible_tiles = []
+        for i in range(4):
+            if i == player_id:
+                continue
+            player = self.players[i]
+            visible_tiles += [tile for completed_set in player.revealed_sets for tile in completed_set]
+            visible_tiles += player.discard_pile

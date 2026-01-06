@@ -76,7 +76,8 @@ class Training:
                 for i in range(4):
                     if selected_actions[i][1] == 20:
                         continue
-                    print(f"The tile {env.game.latest_tile} was discarded")
+                    print(f"The tile {env.game.latest_tile} was discarded")  # TODO: discarding is not working
+                    # properly always
                     print(f"Player {i}'s after hand is:")
                     print([str(tile) for tile in env.game.current_player.hidden_hand])
                     print("Discard pile is:")
@@ -85,7 +86,7 @@ class Training:
                 if env.game.last_acting_player is not None:
                     actioning_player_id = env.game.last_acting_player.player_id
                     episode_memory[actioning_player_id].append(
-                        (state, selected_actions[actioning_player_id])
+                        (state, selected_actions[actioning_player_id][1])
                     )
 
                 state = next_state
@@ -124,9 +125,10 @@ class Training:
 
                 done = env.game.game_over
                 turn_no += 1
-            print("WIN? " + str(env.game.game_over))
-            #  TODO: check if our game is terminating properly. we aren't getting any messages
-            #  TODO: about a game draw even though the game terminates this way
+                print(f"\nThere are {len(env.game.tiles)} remaining")
+
+                # TODO: the number of tiles remaning doesn't seem to always go down
+            print("Did the game conclude in a win? " + str(env.game.game_over))
             final_rewards = [
                 players[i].score - prev_scores[i]
                 for i in range(4)

@@ -43,6 +43,7 @@ class MonteCarloTreeSearch:
     """
     Monte Carlo Tree Search using policy value network
     """
+
     def __init__(self,
                  player_id: int,
                  network: PolicyValueNetwork,
@@ -279,13 +280,59 @@ class MonteCarloTreeSearch:
         Generate a random possible state for our game
         """
         # TODO: implement determinisations
-        # game, is_discard = MahjongGame.reconstruct_game(state)
-        # visible_tiles = game.get_visible_tiles(player_id)
-        # unknown_tiles = game.get_unknown_tiles(player_id)
-        # shuffled_state = game.shuffle_unknown tiles(unknown_tiles, player_id)
-        # return shuffled_state
+        # visible_tiles = self.get_visible_tiles(state, player_id)
+        # unknown_tiles = np.ndarray() - visible_tiles  # TODO: bug with get_visible_tiles()
+
+        # self.shuffle_hidden_state(state, unknown_tiles, player_id)
 
         return state.copy()
+
+    @staticmethod
+    def get_visible_tiles(state: np.ndarray, player_id: int) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Return tuple of visible tiles + claimed flowers
+        :param state:
+        :param player_id:
+        :return:
+        """
+        self_visible_tiles = state[player_id * 217 + 34 * 0: player_id * 217 + 34 * 1]
+        self_visible_tiles += state[player_id * 217 + 34 * 1: player_id * 217 + 34 * 2]
+        self_visible_tiles += state[player_id * 217 + 34 * 2: player_id * 217 + 34 * 3]
+        self_visible_tiles += state[player_id * 217 + 34 * 3: player_id * 217 + 34 * 4]
+        self_visible_tiles += state[player_id * 217 + 34 * 4: player_id * 217 + 34 * 5]
+        self_visible_tiles += state[player_id * 217 + 34 * 5: player_id * 217 + 34 * 6]
+        # add all of our own tiles to visible set
+        flowers = state[player_id * 217 + 34 * 6: player_id * 217 + 34 * 6 + 8]
+        for i in range(4):
+            if i == player_id:
+                continue
+            else:
+                self_visible_tiles += state[i * 217 + 34 * 1: player_id * 217 + 34 * 2]  # first revealed set
+                self_visible_tiles += state[i * 217 + 34 * 2: player_id * 217 + 34 * 3]  # first revealed set
+                self_visible_tiles += state[i * 217 + 34 * 3: player_id * 217 + 34 * 4]  # first revealed set
+                self_visible_tiles += state[i * 217 + 34 * 4: player_id * 217 + 34 * 5]  # first revealed set
+                self_visible_tiles += state[i * 217 + 34 * 5: player_id * 217 + 34 * 6]  # discarded pile
+                flowers += state[i * 217 + 34 * 6: i * 217 + 34 * 6 + 8]  # add flowers
+
+        return self_visible_tiles, flowers
+
+    @staticmethod
+    def shuffle_hidden_state(state: np.ndarray, unknown_tiles: np.ndarray, player_id: int):
+        """
+        Inplace shuffle
+        :param state:
+        :param visible_tiles:
+        :param player_id:
+        :return:
+        """
+        # IMPORTANT, we need to maintain the sum of the hidden hand the same
+        for i in range(4):
+            if i == player_id:
+                continue
+            else:
+                hidden_tile_sum = sum(state[i * 217: i * 217 + 34])
+                #  TODO: randomise somehow
+
 
     @staticmethod
     def mask_illegal_transitions(policy: np.ndarray, legal_transitions: list) -> None:
